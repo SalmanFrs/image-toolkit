@@ -12,11 +12,15 @@
 
 > **A high-performance, hybrid image manipulation suite combining zero-latency browser-native processing with state-of-the-art Computer Vision and Generative AI inpainting.**
 
+🔗 **Live Demo:** [https://image-toolkit-studio.vercel.app/](https://image-toolkit-studio.vercel.app/)  
+📁 **Repository:** [https://github.com/SalmanFrs/image-toolkit](https://github.com/SalmanFrs/image-toolkit)
+
 ---
 
 ## 🌟 Overview
 
 **Image Toolkit** is a full-stack image processing web application designed to bridge the gap between lightweight browser utility tools and heavy deep-learning workflows. Built with a **hybrid architecture**:
+
 - **Client-Side Workflows**: Tools such as resizing, cropping, and batch conversion execute entirely in-browser using HTML5 Canvas and `createImageBitmap` APIs, providing instantaneous processing without uploading sensitive media to any server.
 - **Server & AI Inpainting**: Complex object removal tasks are routed through a Python **FastAPI** backend that supports classical computer vision algorithms (**OpenCV Telea**) on local CPUs, or seamlessly delegates generative inpainting to **Stable Diffusion 1.5** hosted via **Gradio / Google Colab GPU instances**.
 
@@ -25,7 +29,9 @@
 ## 🚀 Key Features
 
 ### 1. 🪄 AI & Classical Object Remover
+
 Remove unwanted elements, artifacts, or photo-bombers with an intuitive brush masking interface.
+
 - **Interactive Mask Editor**: Precision brush control with adjustable radius, multi-step undo history, full canvas clear, and option to export raw binary masks.
 - **Dual Processing Engines**:
   - **OpenCV Telea (Local CPU)**: Fast, server-side inpainting via fast marching method (`cv2.inpaint`), with custom inpainting radius and morphological mask dilation settings.
@@ -35,21 +41,27 @@ Remove unwanted elements, artifacts, or photo-bombers with an intuitive brush ma
   - **Side-by-Side Mode**: Synchronized parallel viewport comparison for detailed inspection.
 
 ### 2. 📐 Smart Image Resizer
+
 High-fidelity client-side image scaling designed for speed and web optimization.
+
 - **Custom Dimensions**: Scale up to 12,000 px with instant aspect-ratio locking or freeform dimensions.
 - **Multi-Format Export**: Convert seamlessly across **PNG**, **JPG**, and **WebP** with auto-detection of the original uploaded format.
 - **Quality & Compression Controls**: Granular compression quality slider for lossy formats (JPG/WebP) with white background fills to prevent transparent alpha clipping.
 - **Real-Time Output Preview**: Inspect the resulting output image dimensions, visual sharpness, and calculated byte size before downloading.
 
 ### 3. ✂️ Interactive Image Cropper
+
 Crop, reframe, and orient images with sub-pixel precision powered by `react-easy-crop`.
+
 - **8 Aspect Ratio Presets**: Choose between **Original**, **1:1 (Square)**, **4:3**, **16:9 (Widescreen)**, **3:2**, **2:3 (Portrait)**, **3:4**, and **9:16 (Stories/Reels)**, or freeform cropping.
 - **Transformation Tools**: Smooth zoom magnification and 90° clockwise/counter-clockwise hardware-accelerated canvas rotation.
 - **Live Output Telemetry**: Live display of cropped pixel width/height and crop coordinate telemetry.
 - **Preview & Format Export**: Dedicated full-resolution modal preview with output format selection (PNG/JPG/WebP).
 
 ### 4. 📦 Batch Format Converter
+
 Convert and compress image collections in parallel entirely within the user's browser.
+
 - **Multi-File Queue**: Drag and drop up to 20 images simultaneously (max 15 MB per file).
 - **Client-Side Bulk Conversion**: Rapid parallel rasterization to PNG, JPG, or WebP with global compression quality tuning.
 - **Storage Metrics**: Direct comparison showing original vs. converted byte sizes and percentage saved.
@@ -96,14 +108,14 @@ flowchart TD
 
 ### Tech Stack Breakdown
 
-| Layer | Technologies | Role / Highlights |
-| :--- | :--- | :--- |
-| **Frontend** | **Next.js 16 (App Router)**, **React 19**, **TypeScript** | Responsive modern UI with server-rendered static shells and dynamic client-side tooling. |
-| **Styling** | **Tailwind CSS v4**, **Turbopack** | Modern dark-themed design system, smooth micro-interactions, and responsive layouts. |
-| **Client Libs** | **react-easy-crop**, **JSZip** | Touch/mouse crop interaction and multi-file zip packaging. |
-| **Backend** | **Python 3.10+**, **FastAPI**, **Uvicorn** | Asynchronous REST API serving endpoints for classical CV and AI routing. |
-| **Computer Vision** | **OpenCV (`opencv-python-headless`)**, **Pillow**, **NumPy** | Binary mask thresholding, morphological dilation, and Telea Fast Marching inpainting. |
-| **AI Inference** | **Stable Diffusion 1.5 Inpainting**, **Gradio Client**, **Google Colab** | Remote GPU pipeline for generative filling of complex masked areas. |
+| Layer               | Technologies                                                             | Role / Highlights                                                                        |
+| :------------------ | :----------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
+| **Frontend**        | **Next.js 16 (App Router)**, **React 19**, **TypeScript**                | Responsive modern UI with server-rendered static shells and dynamic client-side tooling. |
+| **Styling**         | **Tailwind CSS v4**, **Turbopack**                                       | Modern dark-themed design system, smooth micro-interactions, and responsive layouts.     |
+| **Client Libs**     | **react-easy-crop**, **JSZip**                                           | Touch/mouse crop interaction and multi-file zip packaging.                               |
+| **Backend**         | **Python 3.10+**, **FastAPI**, **Uvicorn**                               | Asynchronous REST API serving endpoints for classical CV and AI routing.                 |
+| **Computer Vision** | **OpenCV (`opencv-python-headless`)**, **Pillow**, **NumPy**             | Binary mask thresholding, morphological dilation, and Telea Fast Marching inpainting.    |
+| **AI Inference**    | **Stable Diffusion 1.5 Inpainting**, **Gradio Client**, **Google Colab** | Remote GPU pipeline for generative filling of complex masked areas.                      |
 
 ---
 
@@ -141,9 +153,10 @@ image-toolkit/
 ## 🛠️ Getting Started (Local Setup)
 
 ### Prerequisites
+
 - **Node.js**: version 20+ (recommended 22+) and **npm**
 - **Python**: version 3.10+
-- **Google Colab Account** *(optional, only needed for the AI Inpainting mode)*
+- **Google Colab Account** _(optional, only needed for the AI Inpainting mode)_
 
 > **Note**: The **Image Resizer**, **Image Cropper**, and **Batch Format Converter** operate **100% client-side** in your browser. You can run and use these features without starting the Python backend.
 
@@ -152,6 +165,7 @@ image-toolkit/
 ### 1. Backend Setup (FastAPI)
 
 1. Open a terminal and navigate to the `backend` directory:
+
    ```bash
    cd backend
    ```
@@ -169,15 +183,18 @@ image-toolkit/
      ```
 
 3. Install the dependencies:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 4. Create a `.env` file based on `.env.example`:
+
    ```bash
    cp .env.example .env
    ```
-   *If you intend to run AI Inpainting, paste your active public Gradio URL into `GRADIO_URL`. For OpenCV-only testing, you can leave any placeholder or dummy URL in `.env`.*
+
+   _If you intend to run AI Inpainting, paste your active public Gradio URL into `GRADIO_URL`. For OpenCV-only testing, you can leave any placeholder or dummy URL in `.env`._
 
 5. Start the FastAPI development server:
    ```bash
@@ -190,22 +207,26 @@ image-toolkit/
 ### 2. Frontend Setup (Next.js)
 
 1. Open a second terminal and navigate to the `frontend` directory:
+
    ```bash
    cd frontend
    ```
 
-2. *(Optional)* Configure environment variables:
+2. _(Optional)_ Configure environment variables:
    By default, the frontend connects to `http://127.0.0.1:8000`. If your FastAPI backend runs on a different port or host, copy `.env.example` to `.env.local` and configure `NEXT_PUBLIC_API_URL`:
+
    ```bash
    cp .env.example .env.local
    ```
 
 3. Install npm dependencies:
+
    ```bash
    npm install
    ```
 
 4. Launch the development server:
+
    ```bash
    npm run dev
    ```
@@ -217,6 +238,7 @@ image-toolkit/
 ### 3. Setting Up the AI Inpainting Backend (Google Colab)
 
 To enable **Generative AI Inpainting** (Stable Diffusion 1.5):
+
 1. Upload and open `notebooks/object-remover.ipynb` in [Google Colab](https://colab.research.google.com/).
 2. Change the Colab runtime type to **T4 GPU** (`Runtime > Change runtime type > T4 GPU`).
 3. Run all cells in the notebook. At the end, Gradio will generate a public live tunnel link (e.g., `https://xxxx.gradio.live`).
