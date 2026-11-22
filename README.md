@@ -4,50 +4,50 @@
 [![React](https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![OpenCV](https://img.shields.io/badge/OpenCV-Headless-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)](https://opencv.org/)
-[![Gradio](https://img.shields.io/badge/Gradio-Client-FF7C00?style=for-the-badge&logo=gradio&logoColor=white)](https://www.gradio.app/)
-[![Google Colab](https://img.shields.io/badge/Google_Colab-GPU_Backend-F9AB00?style=for-the-badge&logo=googlecolab&logoColor=white)](https://colab.research.google.com/)
+[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime_Web-WASM-005CED?style=for-the-badge&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
+[![WebAssembly](https://img.shields.io/badge/WebAssembly-WASM-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-> **A high-performance, hybrid image manipulation suite combining zero-latency browser-native processing with state-of-the-art Computer Vision and Generative AI inpainting.**
+> **A 100% private, client-side image manipulation and AI studio running entirely in your browser with zero backend requirements.**
 
-🔗 **Live Demo:** [https://image-toolkit-studio.vercel.app/](https://image-toolkit-studio.vercel.app/)  
 📁 **Repository:** [https://github.com/SalmanFrs/image-toolkit](https://github.com/SalmanFrs/image-toolkit)
 
 ---
 
 ## 🌟 Overview
 
-**Image Toolkit** is a full-stack image processing web application designed to bridge the gap between lightweight browser utility tools and heavy deep-learning workflows. Built with a **hybrid architecture**:
+**Image Toolkit** is a pure, zero-backend edge application for everyday image editing, format conversion, and state-of-the-art AI object removal. 
 
-- **Client-Side Workflows**: Tools such as resizing, cropping, and batch conversion execute entirely in-browser using HTML5 Canvas and `createImageBitmap` APIs, providing instantaneous processing without uploading sensitive media to any server.
-- **Server & AI Inpainting**: Complex object removal tasks are routed through a Python **FastAPI** backend that supports classical computer vision algorithms (**OpenCV Telea**) on local CPUs, or seamlessly delegates generative inpainting to **Stable Diffusion 1.5** hosted via **Gradio / Google Colab GPU instances**.
+- **100% Client-Side Privacy**: All processing occurs locally within the user's browser via HTML5 Canvas, WebAssembly (WASM), and browser APIs. No photos or media files are ever uploaded to any external server.
+- **In-Browser Deep Learning (LaMa ONNX)**: Eliminates the need for expensive Python servers or cloud GPU clusters by executing the Large Mask Inpainting (LaMa) model directly in the browser via `onnxruntime-web`.
+- **Persistent Local AI Caching**: Models are streamed once and cached in the browser's native `Cache API`, enabling instantaneous offline-ready processing on subsequent uses.
+- **High-Resolution Smart ROI Compositing**: Eliminates blurry upscaling by automatically isolating stroke clusters, running localized 512×512 inpainting on square ROIs, and blending seamless feathered patches back onto the full original HD canvas.
 
 ---
 
 ## 🚀 Key Features
 
-### 1. 🪄 AI & Classical Object Remover
+### 1. 🪄 AI Object Remover (LaMa Inpainting)
 
-Remove unwanted elements, artifacts, or photo-bombers with an intuitive brush masking interface.
+Remove unwanted objects, watermarks, text, or photo-bombers with an intelligent brush masking interface running entirely in-browser.
 
-- **Interactive Mask Editor**: Precision brush control with adjustable radius, multi-step undo history, full canvas clear, and option to export raw binary masks.
-- **Dual Processing Engines**:
-  - **OpenCV Telea (Local CPU)**: Fast, server-side inpainting via fast marching method (`cv2.inpaint`), with custom inpainting radius and morphological mask dilation settings.
-  - **Generative AI (Stable Diffusion 1.5)**: Deep-learning diffusion-based inpainting orchestrated through `gradio_client` connected to a remote Google Colab GPU notebook.
+- **Interactive Selection Brush**: Adjustable brush size slider (5 px – 150 px), stroke counter, multi-step undo, clear canvas, and binary mask PNG export.
+- **Dedicated Background Web Worker**: Runs WASM inference in an isolated thread (`ort.env.wasm.proxy = true`) preventing UI freezes or browser "Page Unresponsive" warnings.
+- **Multi-Region & Cluster Detection**: Employs downsampled 128×128 connected-component clustering (BFS). Distinct, distant markings (such as logos in opposite corners) are automatically isolated and sequentially inpainted without downsampling the whole image.
+- **Smart ROI & Feathered Compositing**: Restricts inpainting to square padded patches around each mask cluster, applying a 2px feathered alpha mask so surrounding HD pixels remain 100% untouched.
+- **Real-Time UX Telemetry**: Features real-time download progress with MB counter and completion percentage, a phase-based stepper (Download → Load AI → Prepare → Infer → Compose), and a pulsing scanline overlay.
 - **Interactive Visual Comparison**:
-  - **Split-Screen Slider**: Smooth horizontal before/after slider to inspect inpainting boundaries.
-  - **Side-by-Side Mode**: Synchronized parallel viewport comparison for detailed inspection.
+  - **Split-Screen Slider**: Smooth horizontal before/after draggable divider to inspect boundaries.
+  - **Side-by-Side Mode**: Synchronized viewports for side-by-side comparison.
 
 ### 2. 📐 Smart Image Resizer
 
 High-fidelity client-side image scaling designed for speed and web optimization.
 
 - **Custom Dimensions**: Scale up to 12,000 px with instant aspect-ratio locking or freeform dimensions.
-- **Multi-Format Export**: Convert seamlessly across **PNG**, **JPG**, and **WebP** with auto-detection of the original uploaded format.
-- **Quality & Compression Controls**: Granular compression quality slider for lossy formats (JPG/WebP) with white background fills to prevent transparent alpha clipping.
-- **Real-Time Output Preview**: Inspect the resulting output image dimensions, visual sharpness, and calculated byte size before downloading.
+- **Multi-Format Export**: Convert seamlessly across **PNG**, **JPG**, and **WebP** with auto-detection of the uploaded format.
+- **Quality & Compression Controls**: Granular compression quality slider for lossy formats (JPG/WebP) with clean background fills.
+- **Real-Time Output Preview**: Inspect resulting output image dimensions, visual sharpness, and calculated byte size before downloading.
 
 ### 3. ✂️ Interactive Image Cropper
 
@@ -56,7 +56,7 @@ Crop, reframe, and orient images with sub-pixel precision powered by `react-easy
 - **8 Aspect Ratio Presets**: Choose between **Original**, **1:1 (Square)**, **4:3**, **16:9 (Widescreen)**, **3:2**, **2:3 (Portrait)**, **3:4**, and **9:16 (Stories/Reels)**, or freeform cropping.
 - **Transformation Tools**: Smooth zoom magnification and 90° clockwise/counter-clockwise hardware-accelerated canvas rotation.
 - **Live Output Telemetry**: Live display of cropped pixel width/height and crop coordinate telemetry.
-- **Preview & Format Export**: Dedicated full-resolution modal preview with output format selection (PNG/JPG/WebP).
+- **Preview & Format Export**: Dedicated full-resolution preview with output format selection (PNG/JPG/WebP).
 
 ### 4. 📦 Batch Format Converter
 
@@ -75,47 +75,51 @@ Convert and compress image collections in parallel entirely within the user's br
 flowchart TD
     User["User Browser (Client)"]
 
-    subgraph ClientSide["Client-Side Processing (Zero Latency)"]
-        Resizer["Image Resizer (HTML5 Canvas)"]
+    subgraph ClientStudio["Image Toolkit Studio (100% Client-Side)"]
+        UI["Next.js App Router + React 19 UI"]
+        Resizer["Image Resizer (HTML5 Canvas 2D)"]
         Cropper["Image Cropper (react-easy-crop)"]
         Batch["Batch Converter (createImageBitmap + JSZip)"]
+        
+        subgraph EdgeAI["Edge AI Inpainting Engine"]
+            Cache["Browser Cache API (image-toolkit-ai-models-v1)"]
+            Worker["Background Web Worker (ort.env.wasm.proxy)"]
+            LaMa["LaMa ONNX Model (Float32 / 512x512)"]
+            ROI["Smart ROI Clustering & Feathered Compositor"]
+        end
     end
 
-    subgraph BackendAPI["FastAPI Backend (localhost:8000)"]
-        FastAPIApp["FastAPI Server (main.py)"]
-        CV2["OpenCV Telea Inpainting (CPU cv2.inpaint)"]
-        GradioConnector["Gradio Client Connector"]
-    end
+    RemoteCDN["HuggingFace CDN / Public Storage"]
 
-    subgraph RemoteAI["Remote AI Infrastructure"]
-        Colab["Google Colab Notebook (object-remover.ipynb)"]
-        SD["Stable Diffusion Inpainting (GPU)"]
-    end
-
-    User -->|"Resize / Crop / Batch Convert"| ClientSide
-    ClientSide -->|"Direct Download / Export"| User
-
-    User -->|"Upload Image + Mask"| FastAPIApp
-    FastAPIApp -->|"Method: OpenCV"| CV2
-    CV2 -->|"Stream PNG"| User
-
-    FastAPIApp -->|"Method: AI"| GradioConnector
-    GradioConnector -->|"WebSocket / HTTPS"| Colab
-    Colab -->|"Inference"| SD
-    SD -->|"Result Image"| GradioConnector
-    GradioConnector -->|"Stream PNG"| User
+    User -->|"Paint Mask / Resize / Crop / Convert"| UI
+    UI -->|"Canvas Scaling & Export"| Resizer
+    UI -->|"Cropping & Orientation"| Cropper
+    UI -->|"Batch Processing & Zip"| Batch
+    
+    UI -->|"Execute Inpaint"| ROI
+    ROI -->|"Check / Load Model"| Cache
+    Cache -.->|"First-time Download Stream"| RemoteCDN
+    ROI -->|"Offload 512x512 Tensors"| Worker
+    Worker -->|"Execute WASM Inference"| LaMa
+    LaMa -->|"Inpainted Patch"| ROI
+    ROI -->|"Feathered HD Composite"| UI
+    UI -->|"Direct PNG/JPG/WebP Download"| User
 ```
 
-### Tech Stack Breakdown
+---
 
-| Layer               | Technologies                                                             | Role / Highlights                                                                        |
-| :------------------ | :----------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
-| **Frontend**        | **Next.js 16 (App Router)**, **React 19**, **TypeScript**                | Responsive modern UI with server-rendered static shells and dynamic client-side tooling. |
-| **Styling**         | **Tailwind CSS v4**, **Turbopack**                                       | Modern dark-themed design system, smooth micro-interactions, and responsive layouts.     |
-| **Client Libs**     | **react-easy-crop**, **JSZip**                                           | Touch/mouse crop interaction and multi-file zip packaging.                               |
-| **Backend**         | **Python 3.10+**, **FastAPI**, **Uvicorn**                               | Asynchronous REST API serving endpoints for classical CV and AI routing.                 |
-| **Computer Vision** | **OpenCV (`opencv-python-headless`)**, **Pillow**, **NumPy**             | Binary mask thresholding, morphological dilation, and Telea Fast Marching inpainting.    |
-| **AI Inference**    | **Stable Diffusion 1.5 Inpainting**, **Gradio Client**, **Google Colab** | Remote GPU pipeline for generative filling of complex masked areas.                      |
+## 💻 Tech Stack Breakdown
+
+| Technology | Role & Highlights |
+| :--- | :--- |
+| **Next.js 16 (App Router)** | React 19 framework providing optimized client-side hydration, fast routing, and clean component architecture. |
+| **TypeScript 5** | Strict type safety across image pipelines, bounding box geometry, and ONNX tensor interfaces. |
+| **Tailwind CSS v4** | Dark-themed styling, micro-animations (shimmer, scanline), and mobile-responsive layout. |
+| **ONNX Runtime Web (`onnxruntime-web`)** | WebAssembly execution provider with background worker proxy for client-side deep learning inference. |
+| **LaMa (Large Mask Inpainting)** | State-of-the-art fast Fourier convolution (FFC) architecture for resolution-independent structural inpainting. |
+| **HTML5 Canvas 2D** | Hardware-accelerated image scaling, drawing, mask dilation, and feathered compositing. |
+| **react-easy-crop** | High-performance touch and mouse cropping with customizable aspect ratios and rotation. |
+| **JSZip** | In-browser client-side archive generation for batch image downloads. |
 
 ---
 
@@ -123,29 +127,27 @@ flowchart TD
 
 ```text
 image-toolkit/
-├── backend/
-│   ├── .env.example            # Backend environment template (GRADIO_URL)
-│   ├── main.py                 # FastAPI application, endpoints & CV logic
-│   └── requirements.txt        # Python backend dependencies
-├── frontend/
-│   ├── app/
-│   │   ├── components/
-│   │   │   ├── BatchConverter.tsx  # Multi-file format converter & ZIP packager
-│   │   │   ├── ImageCropper.tsx    # Crop & rotation tool using react-easy-crop
-│   │   │   ├── ImageEditor.tsx     # Inpainting mask brush & comparison views
-│   │   │   └── ImageResizer.tsx    # Image scaling & format compression
-│   │   ├── globals.css         # Global styles & Tailwind configuration
-│   │   ├── layout.tsx          # Root layout and metadata
-│   │   └── page.tsx            # Main application tab switcher & state
-│   ├── .env.example            # Frontend environment template (NEXT_PUBLIC_API_URL)
-│   ├── package.json            # Node.js dependencies and scripts
-│   ├── next.config.ts          # Next.js build configuration
-│   └── tsconfig.json           # TypeScript configuration
-├── notebooks/
-│   └── object-remover.ipynb    # Google Colab notebook hosting the Gradio AI service
-├── .gitignore
-├── LICENSE
-└── README.md
+├── app/
+│   ├── components/
+│   │   ├── BatchConverter.tsx   # Multi-file format converter & ZIP packager
+│   │   ├── ImageCropper.tsx     # Crop & rotation tool using react-easy-crop
+│   │   ├── ImageEditor.tsx      # Inpainting mask brush, progress UI & comparison views
+│   │   └── ImageResizer.tsx     # Image scaling & format compression
+│   ├── lib/
+│   │   └── lamaInpaint.ts       # ONNX Runtime Web engine, streaming Cache API & ROI compositor
+│   ├── favicon.ico
+│   ├── globals.css              # Global styles, shimmer & scanline keyframes
+│   ├── layout.tsx               # Root layout and metadata
+│   └── page.tsx                 # Studio navigation & tool state
+├── public/                      # Static assets and icons
+├── .env.example                 # Optional environment configuration
+├── .gitignore                   # Git ignore rules for Next.js & node_modules
+├── eslint.config.mjs            # ESLint configuration
+├── LICENSE                      # MIT License
+├── next.config.ts               # Next.js configuration
+├── package.json                 # Node.js dependencies and scripts
+├── README.md                    # Project documentation
+└── tsconfig.json                # TypeScript compiler configuration
 ```
 
 ---
@@ -154,111 +156,43 @@ image-toolkit/
 
 ### Prerequisites
 
-- **Node.js**: version 20+ (recommended 22+) and **npm**
-- **Python**: version 3.10+
-- **Google Colab Account** _(optional, only needed for the AI Inpainting mode)_
+- **Node.js**: version 20+ (recommended 22+)
+- **npm** (comes with Node.js)
 
-> **Note**: The **Image Resizer**, **Image Cropper**, and **Batch Format Converter** operate **100% client-side** in your browser. You can run and use these features without starting the Python backend.
+### Installation & Run
 
----
-
-### 1. Backend Setup (FastAPI)
-
-1. Open a terminal and navigate to the `backend` directory:
-
+1. Clone the repository:
    ```bash
-   cd backend
+   git clone https://github.com/SalmanFrs/image-toolkit.git
+   cd image-toolkit
    ```
 
-2. Create and activate a Python virtual environment:
-   - **Windows (PowerShell)**:
-     ```powershell
-     python -m venv .venv
-     .\.venv\Scripts\Activate.ps1
-     ```
-   - **Linux / macOS**:
-     ```bash
-     python3 -m venv .venv
-     source .venv/bin/activate
-     ```
-
-3. Install the dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Create a `.env` file based on `.env.example`:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   _If you intend to run AI Inpainting, paste your active public Gradio URL into `GRADIO_URL`. For OpenCV-only testing, you can leave any placeholder or dummy URL in `.env`._
-
-5. Start the FastAPI development server:
-   ```bash
-   uvicorn main:app --reload --port 8000
-   ```
-   The API will be available at `http://localhost:8000` (Health check: `http://localhost:8000/health`).
-
----
-
-### 2. Frontend Setup (Next.js)
-
-1. Open a second terminal and navigate to the `frontend` directory:
-
-   ```bash
-   cd frontend
-   ```
-
-2. _(Optional)_ Configure environment variables:
-   By default, the frontend connects to `http://127.0.0.1:8000`. If your FastAPI backend runs on a different port or host, copy `.env.example` to `.env.local` and configure `NEXT_PUBLIC_API_URL`:
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-3. Install npm dependencies:
-
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-4. Launch the development server:
+3. *(Optional)* Configure a custom LaMa model URL:
+   Copy `.env.example` to `.env.local` if you wish to host the ONNX model on a custom CDN or self-hosted endpoint:
+   ```bash
+   cp .env.example .env.local
+   ```
 
+4. Start the development server:
    ```bash
    npm run dev
    ```
 
-5. Open your browser and navigate to **[http://localhost:3000](http://localhost:3000)**.
+5. Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ---
 
-### 3. Setting Up the AI Inpainting Backend (Google Colab)
+## 🚀 Deployment
 
-To enable **Generative AI Inpainting** (Stable Diffusion 1.5):
+Because Image Toolkit is **100% client-side**, it can be deployed with zero backend infrastructure to any static hosting provider or modern edge platform:
 
-1. Upload and open `notebooks/object-remover.ipynb` in [Google Colab](https://colab.research.google.com/).
-2. Change the Colab runtime type to **T4 GPU** (`Runtime > Change runtime type > T4 GPU`).
-3. Run all cells in the notebook. At the end, Gradio will generate a public live tunnel link (e.g., `https://xxxx.gradio.live`).
-4. Copy this public URL and paste it into `backend/.env`:
-   ```env
-   GRADIO_URL="https://xxxx.gradio.live"
-   ```
-5. Restart your FastAPI backend server. The Object Remover tool will now use Stable Diffusion when the **AI Mode** toggle is selected.
-
----
-
-## 🔮 Deployment & Future Roadmap
-
-- **Frontend Deployment**: Can be deployed to **Vercel** or **Netlify** with zero additional configuration. When connecting to a deployed backend, add the `NEXT_PUBLIC_API_URL` environment variable pointing to your FastAPI service URL.
-- **Backend Deployment**: The FastAPI application can be containerized with Docker and hosted on **Hugging Face Spaces (CPU)**, **Render**, or **Railway** for OpenCV processing.
-- **Permanent AI Serving**: Transition the temporary Colab Gradio endpoint to a dedicated serverless GPU endpoint (such as **Modal**, **RunPod**, or **Replicate**) for 24/7 cloud inpainting availability.
-- **Additional Roadmap Features**:
-  - Web Worker support for off-thread multi-image batch conversion.
-  - Smart automatic object segmentation using Segment Anything (SAM).
-  - EXIF metadata viewing and stripping for privacy protection.
+- **Vercel**: Import the repository and deploy with default Next.js settings.
+- **Netlify / Cloudflare Pages / GitHub Pages**: Deploy using standard Next.js build commands (`npm run build`).
 
 ---
 

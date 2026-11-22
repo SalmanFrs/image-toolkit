@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { runLamaInpaint } from "../lib/lamaInpaint";
+import type { InpaintProgress } from "../lib/lamaInpaint";
 
 type Point = {
   x: number;
@@ -13,7 +15,6 @@ type Stroke = {
 };
 
 type EditorMode = "remove";
-type ProcessingMethod = "ai" | "opencv";
 
 type ImageEditorProps = {
   imageUrl: string;
@@ -21,6 +22,18 @@ type ImageEditorProps = {
 };
 
 const MAX_PREVIEW_SIZE = 1600;
+
+// ── Phase stepper config ───────────────────────────────────────────
+const PHASE_STEPS: {
+  key: InpaintProgress["phase"];
+  label: string;
+}[] = [
+  { key: "downloading", label: "Download" },
+  { key: "loading", label: "Load AI" },
+  { key: "preparing", label: "Prepare" },
+  { key: "inferring", label: "Infer" },
+  { key: "compositing", label: "Compose" },
+];
 
 export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
   const imageCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,12 +56,9 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState<InpaintProgress | null>(null);
   const [processingError, setProcessingError] = useState("");
   const [resultUrl, setResultUrl] = useState<string | null>(null);
-  const [inpaintingRadius, setInpaintingRadius] = useState(5);
-  const [maskDilation, setMaskDilation] = useState(3);
-  const [processingMethod, setProcessingMethod] =
-    useState<ProcessingMethod>("ai");
   const [comparisonMode, setComparisonMode] = useState<
     "slider" | "side-by-side"
   >("slider");
@@ -258,7 +268,7 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isLoading || imageError || drawingRef.current) return;
+    if (isLoading || imageError || drawingRef.current || isProcessing) return;
 
     event.preventDefault();
 
@@ -375,89 +385,65 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
 
   const processImage = async () => {
     const maskCanvas = maskCanvasRef.current;
+    const imageCanvas = imageCanvasRef.current;
 
-    if (!maskCanvas || strokeCount === 0) {
+    if (!maskCanvas || !imageCanvas || strokeCount === 0) {
       setProcessingError("Select the object you want to remove first.");
       return;
     }
 
     setIsProcessing(true);
     setProcessingError("");
+    setProgress({
+      phase: "preparing",
+      message: "Preparing image...",
+      percent: 0,
+    });
 
     try {
-      // Fetch the original image rather than the scaled preview.
-      const originalResponse = await fetch(imageUrl);
-
-      if (!originalResponse.ok) {
-        throw new Error("Failed to read the original image.");
-      }
-
-      const originalBlob = await originalResponse.blob();
-
-      // Export the black-and-white mask from the canvas.
-      const maskBlob = await new Promise<Blob>((resolve, reject) => {
-        maskCanvas.toBlob((blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error("Failed to create the image mask."));
-          }
-        }, "image/png");
+      // Buat canvas resolusi penuh untuk gambar asli
+      const originalImg = new Image();
+      await new Promise<void>((resolve, reject) => {
+        originalImg.onload = () => resolve();
+        originalImg.onerror = () =>
+          reject(new Error("Failed to load original image data."));
+        originalImg.src = imageUrl;
       });
 
-      const formData = new FormData();
-      formData.append("image", originalBlob, "original.png");
-      formData.append("mask", maskBlob, "mask.png");
-      formData.append("mode", "remove");
-      formData.append("radius", String(inpaintingRadius));
-      formData.append("dilation", String(maskDilation));
-
-      // Select the backend endpoint based on the chosen processing method.
-      const apiBaseUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const endpoint =
-        processingMethod === "ai"
-          ? `${apiBaseUrl}/remove-object-ai`
-          : `${apiBaseUrl}/remove-object`;
-
-      let response: Response;
-
-      try {
-        response = await fetch(endpoint, {
-          method: "POST",
-          body: formData,
-        });
-      } catch (error) {
-        console.error("Backend connection failed:", error);
-
-        throw new Error(
-          processingMethod === "ai"
-            ? "Unable to connect to the AI service. Please make sure the backend and Google Colab session are running, then try again."
-            : "Unable to connect to the backend. Please make sure the FastAPI server is running, then try again.",
-        );
+      const fullOriginalCanvas = document.createElement("canvas");
+      fullOriginalCanvas.width = originalImg.naturalWidth;
+      fullOriginalCanvas.height = originalImg.naturalHeight;
+      const fullOrigCtx = fullOriginalCanvas.getContext("2d");
+      if (!fullOrigCtx) {
+        throw new Error("Unable to create canvas context for full image.");
       }
+      fullOrigCtx.drawImage(originalImg, 0, 0);
 
-      if (!response.ok) {
-        let message = "Image processing failed.";
-
-        try {
-          const errorData = await response.json();
-          message = errorData.detail || message;
-        } catch {
-          // Use the default message if the response is not JSON.
-        }
-
-        throw new Error(message);
+      // Skalakan mask canvas ke resolusi penuh gambar asli
+      const fullMaskCanvas = document.createElement("canvas");
+      fullMaskCanvas.width = originalImg.naturalWidth;
+      fullMaskCanvas.height = originalImg.naturalHeight;
+      const fullMaskCtx = fullMaskCanvas.getContext("2d");
+      if (!fullMaskCtx) {
+        throw new Error("Unable to create canvas context for mask.");
       }
+      fullMaskCtx.imageSmoothingEnabled = false;
+      fullMaskCtx.drawImage(
+        maskCanvas,
+        0,
+        0,
+        originalImg.naturalWidth,
+        originalImg.naturalHeight,
+      );
 
-      const resultBlob = await response.blob();
+      // Jalankan LaMa Inpainting client-side (100% di browser)
+      const outputDataUrl = await runLamaInpaint(
+        fullOriginalCanvas,
+        fullMaskCanvas,
+        (p) => setProgress(p),
+      );
 
-      if (!resultBlob.type.startsWith("image/")) {
-        throw new Error("The backend did not return an image file.");
-      }
-
-      const newResultUrl = URL.createObjectURL(resultBlob);
-      setResultUrl(newResultUrl);
+      setResultUrl(outputDataUrl);
     } catch (error) {
       console.error("Image processing failed:", error);
 
@@ -468,8 +454,14 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
       );
     } finally {
       setIsProcessing(false);
+      setProgress(null);
     }
   };
+
+  // ── Helper: determine completed step index ──────────────────────
+  const currentPhaseIndex = progress
+    ? PHASE_STEPS.findIndex((s) => s.key === progress.phase)
+    : -1;
 
   return (
     <div className="space-y-5">
@@ -500,9 +492,9 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
           <canvas
             ref={overlayCanvasRef}
             aria-label="Brush selection canvas"
-            className={`absolute inset-0 h-full w-full cursor-crosshair touch-none select-none ${
+            className={`absolute inset-0 h-full w-full select-none ${
               imageSize.width === 0 ? "invisible" : ""
-            }`}
+            } ${isProcessing ? "pointer-events-none" : "cursor-crosshair touch-none"}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={finishDrawing}
@@ -511,6 +503,13 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
           />
 
           <canvas ref={maskCanvasRef} className="hidden" aria-hidden="true" />
+
+          {/* AI scan overlay during processing */}
+          {isProcessing && imageSize.width > 0 && (
+            <div className="ai-scan-overlay pointer-events-none absolute inset-0 overflow-hidden rounded-lg bg-violet-500/[0.06]">
+              <div className="absolute inset-0 border-2 border-violet-400/30 rounded-lg" />
+            </div>
+          )}
 
           {isLoading && (
             <div className="absolute inset-0 flex min-h-[260px] items-center justify-center">
@@ -531,142 +530,18 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
       </p>
 
       <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-        <div className="grid items-start gap-5 lg:grid-cols-2">
-          <div className="space-y-3">
+        <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-4">
+          <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">
-              Processing Method
+              Client-Side AI Inpainting (LaMa)
             </h3>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <label
-                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition ${
-                  processingMethod === "ai"
-                    ? "border-violet-400/40 bg-violet-400/[0.06]"
-                    : "border-white/10 hover:bg-white/[0.03]"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="processing-method"
-                  value="ai"
-                  checked={processingMethod === "ai"}
-                  onChange={() => setProcessingMethod("ai")}
-                  className="mt-1 accent-violet-500"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-gray-200">
-                    Generative AI (Stable Diffusion)
-                  </span>
-                  <span className="mt-1 block text-xs leading-5 text-gray-400">
-                    Generate results with Stable Diffusion. Requires an internet
-                    connection and an active Google Colab session.
-                  </span>
-                </span>
-              </label>
-
-              <label
-                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition ${
-                  processingMethod === "opencv"
-                    ? "border-violet-400/40 bg-violet-400/[0.06]"
-                    : "border-white/10 hover:bg-white/[0.03]"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="processing-method"
-                  value="opencv"
-                  checked={processingMethod === "opencv"}
-                  onChange={() => setProcessingMethod("opencv")}
-                  className="mt-1 accent-violet-500"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-gray-200">
-                    OpenCV Telea
-                  </span>
-                  <span className="mt-1 block text-xs leading-5 text-gray-400">
-                    A lightweight local alternative for filling in the removed
-                    area.
-                  </span>
-                </span>
-              </label>
-            </div>
+            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-[11px] font-medium text-violet-300">
+              100% In-Browser ONNX
+            </span>
           </div>
-
-          <div className="space-y-4">
-            {processingMethod === "ai" ? (
-              <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-4">
-                <h3 className="text-sm font-semibold text-white">
-                  AI Inpainting
-                </h3>
-                <p className="mt-2 text-xs leading-5 text-gray-400">
-                  Stable Diffusion uses generative AI to reconstruct the
-                  selected area with natural-looking details that blend into the
-                  surrounding image.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4 rounded-lg border border-white/10 p-3">
-                <h3 className="text-sm font-semibold text-white">
-                  OpenCV Settings
-                </h3>
-                <div>
-                  <div className="flex items-center justify-between gap-3">
-                    <label
-                      htmlFor="inpainting-radius"
-                      className="text-sm text-gray-300"
-                    >
-                      Inpainting radius
-                    </label>
-                    <span className="text-sm text-violet-300">
-                      {inpaintingRadius} px
-                    </span>
-                  </div>
-                  <input
-                    id="inpainting-radius"
-                    type="range"
-                    min="1"
-                    max="15"
-                    step="2"
-                    value={inpaintingRadius}
-                    onChange={(event) =>
-                      setInpaintingRadius(Number(event.target.value))
-                    }
-                    className="mt-3 w-full cursor-pointer accent-violet-500"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Controls the fill radius for the removed area.
-                  </p>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between gap-3">
-                    <label
-                      htmlFor="mask-dilation"
-                      className="text-sm text-gray-300"
-                    >
-                      Mask dilation
-                    </label>
-                    <span className="text-sm text-violet-300">
-                      {maskDilation} px
-                    </span>
-                  </div>
-                  <input
-                    id="mask-dilation"
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="1"
-                    value={maskDilation}
-                    onChange={(event) =>
-                      setMaskDilation(Number(event.target.value))
-                    }
-                    className="mt-3 w-full cursor-pointer accent-violet-500"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Expands the mask to include the object edges.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+          <p className="mt-2 text-xs leading-5 text-gray-400">
+            Powered by LaMa AI via ONNX Runtime WebAssembly running 100% locally in your browser. Complete privacy with zero server uploads—the AI model is downloaded once, cached in your browser via the Cache API, and composited using Smart ROI preserving full HD resolution.
+          </p>
         </div>
 
         <div className="border-t border-white/10 pt-4">
@@ -690,8 +565,9 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
                 max="150"
                 step="5"
                 value={brushSize}
+                disabled={isProcessing}
                 onChange={(event) => setBrushSize(Number(event.target.value))}
-                className="mt-4 w-full cursor-pointer accent-violet-500"
+                className="mt-4 w-full cursor-pointer accent-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
               />
               <div className="mt-1 flex justify-between text-xs text-gray-500">
                 <span>Small</span>
@@ -706,21 +582,21 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
               <div className="flex flex-wrap justify-center gap-2">
                 <button
                   onClick={undo}
-                  disabled={strokeCount === 0}
+                  disabled={strokeCount === 0 || isProcessing}
                   className="rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Undo
                 </button>
                 <button
                   onClick={clearSelection}
-                  disabled={strokeCount === 0}
+                  disabled={strokeCount === 0 || isProcessing}
                   className="rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Clear
                 </button>
                 <button
                   onClick={exportMask}
-                  disabled={strokeCount === 0}
+                  disabled={strokeCount === 0 || isProcessing}
                   className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Export Mask
@@ -739,25 +615,73 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
           }
           className="w-full rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isProcessing
-            ? "Processing Image..."
-            : processingMethod === "ai"
-              ? "Remove Object with AI"
-              : "Remove Object with OpenCV"}
+          {isProcessing ? "Processing Image..." : "Remove Object with AI (LaMa)"}
         </button>
+
+        {/* ── Progress UI ─────────────────────────────────────────── */}
+        {progress && (
+          <div className="space-y-3 rounded-lg bg-violet-500/[0.07] p-4">
+            {/* Phase stepper */}
+            <div className="flex items-center justify-between gap-1">
+              {PHASE_STEPS.map((step, idx) => {
+                const isActive = idx === currentPhaseIndex;
+                const isDone = idx < currentPhaseIndex;
+                return (
+                  <div key={step.key} className="flex flex-1 flex-col items-center gap-1.5">
+                    <div
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
+                        isDone
+                          ? "bg-violet-500 text-white"
+                          : isActive
+                            ? "bg-violet-400 text-white ring-2 ring-violet-400/40"
+                            : "bg-white/10 text-gray-500"
+                      }`}
+                    >
+                      {isDone ? "✓" : idx + 1}
+                    </div>
+                    <span
+                      className={`text-[10px] leading-tight ${
+                        isActive ? "font-semibold text-violet-300" : isDone ? "text-violet-400" : "text-gray-500"
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Progress bar */}
+            <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className={`progress-bar-shimmer relative h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400 ${
+                  progress.phase === "downloading"
+                    ? "transition-all duration-150 ease-out"
+                    : "transition-none"
+                }`}
+                style={{ width: `${progress.percent ?? 0}%` }}
+              />
+            </div>
+
+            {/* Status text */}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-violet-300">{progress.message}</span>
+              <span className="tabular-nums text-gray-400">
+                {progress.phase === "downloading" && progress.loadedMB != null
+                  ? progress.totalMB != null
+                    ? `${progress.loadedMB} / ${progress.totalMB} MB`
+                    : `${progress.loadedMB} MB`
+                  : progress.percent != null
+                    ? `${progress.percent}%`
+                    : ""}
+              </span>
+            </div>
+          </div>
+        )}
 
         {processingError && (
           <p role="alert" className="text-sm text-red-300">
             {processingError}
-          </p>
-        )}
-
-        {isProcessing && (
-          <p className="text-sm text-gray-400">
-            {processingMethod === "ai"
-              ? "Removing the object with Stable Diffusion through Google Colab."
-              : "Removing the object locally with OpenCV."}{" "}
-            Please wait for processing to finish.
           </p>
         )}
 

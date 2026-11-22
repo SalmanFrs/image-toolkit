@@ -228,24 +228,21 @@ export default function Home() {
                 <ol className="mt-5 list-inside list-decimal space-y-3 text-sm leading-6 text-gray-400">
                   <li>Upload an image.</li>
                   <li>Paint over the object you want to remove.</li>
-                  <li>Choose AI or OpenCV and adjust the settings.</li>
+                  <li>Click &quot;Remove Object with AI (LaMa)&quot;.</li>
                   <li>
-                    Process the image, compare the result, then download it.
+                    Compare the result using the slider or side-by-side view, then download.
                   </li>
                 </ol>
                 <div className="mt-6 rounded-xl border border-violet-400/20 bg-violet-400/5 p-3">
                   <p className="text-sm font-medium text-violet-300">
-                    Processing
+                    100% Client-Side Processing
                   </p>
                   <p className="mt-2 text-xs leading-5 text-gray-400">
-                    AI processing requires the connected Google Colab Gradio
-                    session to be active. OpenCV Telea is a lighter alternative.
+                    Runs entirely in your browser using ONNX Runtime Web. Zero server latency, full privacy, and instant subsequent runs via browser Cache API.
                   </p>
                 </div>
                 <p className="mt-4 text-xs leading-5 text-gray-500">
-                  Red areas indicate the selected region. The original image is
-                  retained for processing; the editor preview may be scaled for
-                  performance.
+                  Red areas indicate your selection mask. High-resolution compositing ensures surrounding pixels remain crisp without quality degradation.
                 </p>
               </aside>
             </div>
@@ -254,7 +251,7 @@ export default function Home() {
       </section>
 
       <footer className="border-t border-white/10 px-6 py-6 text-center text-xs text-gray-500">
-        Image Toolkit · Built with Next.js, FastAPI &amp; OpenCV
+        Image Toolkit · Privacy-First Client-Side AI Studio
       </footer>
     </main>
   );
