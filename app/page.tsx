@@ -5,15 +5,17 @@ import ImageEditor from "./components/ImageEditor";
 import ImageResizer from "./components/ImageResizer";
 import ImageCropper from "./components/ImageCropper";
 import BatchConverter from "./components/BatchConverter";
+import ImageCompressor from "./components/ImageCompressor";
+import { useToast } from "./components/Toast";
 
-type ActiveTool = "remove" | "resize" | "crop" | "convert";
+type ActiveTool = "remove" | "compress" | "resize" | "crop" | "convert";
 
 export default function Home() {
   const [activeTool, setActiveTool] = useState<ActiveTool>("remove");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
-  const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     return () => {
@@ -23,31 +25,27 @@ export default function Home() {
 
   function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file.");
-      event.target.value = "";
-      return;
-    }
+
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setError("Supported formats: PNG, JPG, and WEBP.");
-      event.target.value = "";
+      showToast("error", "Unsupported file format. Please upload PNG, JPG, or WEBP.");
       return;
     }
     if (file.size > 15 * 1024 * 1024) {
-      setError("Maximum image size is 15 MB.");
-      event.target.value = "";
+      showToast("error", "Maximum image size is 15 MB.");
       return;
     }
-    setError("");
+
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
     setImageUrl(URL.createObjectURL(file));
     setFileName(file.name);
   }
 
   function resetImage() {
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
     setImageUrl(null);
     setFileName("");
-    setError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -98,6 +96,18 @@ export default function Home() {
             </button>
             <button
               role="tab"
+              aria-selected={activeTool === "compress"}
+              onClick={() => setActiveTool("compress")}
+              className={`rounded-xl px-5 py-3 text-sm font-medium transition ${
+                activeTool === "compress"
+                  ? "bg-violet-500 text-white"
+                  : "border border-white/10 bg-white/5 text-gray-400 hover:bg-white/10"
+              }`}
+            >
+              Image Compressor
+            </button>
+            <button
+              role="tab"
               aria-selected={activeTool === "resize"}
               onClick={() => setActiveTool("resize")}
               className={`rounded-xl px-5 py-3 text-sm font-medium transition ${
@@ -134,6 +144,11 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Image Compressor: keep mounted so its state is preserved when switching tools. */}
+          <div className={activeTool === "compress" ? "block" : "hidden"}>
+            <ImageCompressor />
+          </div>
+
           {/* Image Resizer: keep mounted so its state is preserved when switching tools. */}
           <div className={activeTool === "resize" ? "block" : "hidden"}>
             <ImageResizer />
@@ -153,14 +168,6 @@ export default function Home() {
           <div className={activeTool === "remove" ? "block" : "hidden"}>
             <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
               <div className="min-w-0 rounded-2xl border border-white/10 bg-[#11141c] p-4 sm:p-5">
-                {error && (
-                  <p
-                    role="alert"
-                    className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-                  >
-                    {error}
-                  </p>
-                )}
                 {imageUrl ? (
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">

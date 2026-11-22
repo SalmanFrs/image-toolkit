@@ -121,25 +121,26 @@ export default function BatchConverter() {
     const remainingSlots = MAX_FILES - items.length;
 
     if (remainingSlots <= 0) {
-      setError(`Maximum ${MAX_FILES} images allowed per batch.`);
+      showToast("error", `Maximum ${MAX_FILES} images allowed per batch.`);
       return;
     }
 
     const filesToProcess = selectedFiles.slice(0, remainingSlots);
     if (selectedFiles.length > remainingSlots) {
-      errors.push(
+      showToast(
+        "warning",
         `Only the first ${remainingSlots} image(s) were added (max ${MAX_FILES} files per batch).`,
       );
     }
 
     for (const file of filesToProcess) {
       if (!SUPPORTED_TYPES.includes(file.type)) {
-        errors.push(`"${file.name}" skipped: unsupported format.`);
+        showToast("error", `"${file.name}" skipped: unsupported format.`);
         continue;
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        errors.push(`"${file.name}" skipped: exceeds 15 MB limit.`);
+        showToast("error", `"${file.name}" skipped: exceeds 15 MB limit.`);
         continue;
       }
 
@@ -154,8 +155,6 @@ export default function BatchConverter() {
     if (newItems.length > 0) {
       setItems((prev) => [...prev, ...newItems]);
     }
-
-    setError(errors.join(" "));
   }
 
   function handleRemoveItem(id: string) {
@@ -333,15 +332,6 @@ export default function BatchConverter() {
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       {/* Upload Area & Image List */}
       <div className="min-w-0 rounded-2xl border border-white/10 bg-[#11141c] p-4 sm:p-5">
-        {error && (
-          <p
-            role="alert"
-            className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-          >
-            {error}
-          </p>
-        )}
-
         {items.length > 0 ? (
           <div className="space-y-4">
             {/* Header */}

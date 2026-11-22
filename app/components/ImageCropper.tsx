@@ -145,24 +145,20 @@ export default function ImageCropper() {
 
   function handleImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-
+    event.target.value = "";
     if (!file) return;
 
-    // Allow selecting the same file again.
-    event.target.value = "";
-
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setError("Supported formats: PNG, JPG, and WEBP.");
+      showToast("error", "Unsupported file format. Please upload PNG, JPG, or WEBP.");
       return;
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      setError("Maximum image size is 15 MB.");
+      showToast("error", "Maximum image size is 15 MB.");
       return;
     }
 
     const newImageUrl = URL.createObjectURL(file);
-
     const image = new Image();
 
     image.onload = () => {
@@ -185,7 +181,7 @@ export default function ImageCropper() {
 
     image.onerror = () => {
       URL.revokeObjectURL(newImageUrl);
-      setError("The image could not be read. Try another file.");
+      showToast("error", "Failed to load image. Please try another file.");
     };
 
     image.src = newImageUrl;
@@ -318,15 +314,6 @@ export default function ImageCropper() {
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       {/* Crop Editor */}
       <div className="min-w-0 rounded-2xl border border-white/10 bg-[#11141c] p-4 sm:p-5">
-        {error && (
-          <p
-            role="alert"
-            className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-          >
-            {error}
-          </p>
-        )}
-
         {imageUrl ? (
           <div className="space-y-4">
             {/* Image Information */}

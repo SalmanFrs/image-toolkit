@@ -74,6 +74,19 @@ Convert and compress image collections in parallel entirely within the user's br
 - **Storage Metrics**: Direct comparison showing original vs. converted byte sizes and percentage saved.
 - **Flexible Downloads**: Download individual converted files as `{fileName}-converted-result.{ext}` or package the entire batch into a single archive (`image-toolkit-converted.zip`) on the fly using `JSZip`.
 
+### 5. ⚡ Client-Side Image Compressor
+
+Intelligent browser-based compression balancing file size reduction with visual clarity.
+
+- **High-Capacity File Support**: Accommodates files up to 30 MB (PNG, JPG, or WebP) directly in the client.
+- **Dual Compression Modes**:
+  - **Quality Slider & Quick Presets**: Precise 10% - 100% tuning with one-click presets: High Quality (85%), Balanced (75%), and Maximum Compression (50%).
+  - **Target File Size Search with Progressive Fallback**: Automatic binary search iteration to achieve a target maximum file size in KB, with progressive dimension scaling fallback for lossless PNGs and ultra-high-resolution images (5000px+).
+- **Smart Format Auto-Detection**: Converts or retains formats across JPG, WebP, and PNG with auto-detection on upload.
+- **Optional Max Dimension Scaling**: Optional downscaling for additional byte savings (e.g. 1920px).
+- **Live Visual Comparison Slider**: Interactive before/after split slider allowing users to inspect sharpness before saving.
+- **Standardized Export**: Saves directly as `{fileName}-compressed-result.{ext}`.
+
 ---
 
 ## 🏗️ System Architecture
@@ -86,7 +99,9 @@ flowchart TD
         UI["Next.js App Router + React 19 UI"]
         Resizer["Image Resizer (HTML5 Canvas 2D)"]
         Cropper["Image Cropper (react-easy-crop)"]
+        Compressor["Image Compressor (HTML5 Canvas 2D)"]
         Batch["Batch Converter (createImageBitmap + JSZip)"]
+        Toast["Toast Notification System"]
         
         subgraph EdgeAI["Edge AI Inpainting Engine"]
             Cache["Browser Cache API (image-toolkit-ai-models-v1)"]
@@ -98,10 +113,12 @@ flowchart TD
 
     RemoteCDN["HuggingFace CDN / Public Storage"]
 
-    User -->|"Paint Mask / Resize / Crop / Convert"| UI
+    User -->|"Paint Mask / Resize / Crop / Compress / Convert"| UI
     UI -->|"Canvas Scaling & Export"| Resizer
     UI -->|"Cropping & Orientation"| Cropper
+    UI -->|"Quality Tuning & Search"| Compressor
     UI -->|"Batch Processing & Zip"| Batch
+    UI -->|"Status Feedback & Alerts"| Toast
     
     UI -->|"Execute Inpaint"| ROI
     ROI -->|"Check / Load Model"| Cache
@@ -137,9 +154,11 @@ image-toolkit/
 ├── app/
 │   ├── components/
 │   │   ├── BatchConverter.tsx   # Multi-file format converter & ZIP packager
+│   │   ├── ImageCompressor.tsx  # Browser-based image compression & target size search
 │   │   ├── ImageCropper.tsx     # Crop & rotation tool using react-easy-crop
 │   │   ├── ImageEditor.tsx      # Inpainting mask brush, progress UI & comparison views
-│   │   └── ImageResizer.tsx     # Image scaling & format compression
+│   │   ├── ImageResizer.tsx     # Image scaling & format compression
+│   │   └── Toast.tsx            # Zero-dependency toast notification viewport & hook
 │   ├── lib/
 │   │   └── lamaInpaint.ts       # ONNX Runtime Web engine, streaming Cache API & ROI compositor
 │   ├── favicon.ico

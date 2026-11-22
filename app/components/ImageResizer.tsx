@@ -46,8 +46,23 @@ export default function ImageResizer() {
   }, [outputPreviewUrl]);
 
   function selectFile(nextFile?: File) {
-    setError("");
     if (!nextFile) return;
+
+    if (!nextFile.type.startsWith("image/")) {
+      showToast("error", "Please select a valid image file.");
+      return;
+    }
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(nextFile.type)) {
+      showToast("error", "Unsupported file format. Please upload PNG, JPG, or WEBP.");
+      return;
+    }
+
+    if (nextFile.size > MAX_FILE_SIZE) {
+      showToast("error", "Maximum image size is 15 MB.");
+      return;
+    }
+
     // Detect the format from the uploaded image.
     const formatMap: Record<string, OutputFormat> = {
       "image/jpeg": "image/jpeg",
@@ -56,19 +71,8 @@ export default function ImageResizer() {
     };
 
     const detectedFormat = formatMap[nextFile.type];
-
     if (detectedFormat) {
       setFormat(detectedFormat);
-    }
-
-    if (!nextFile.type.startsWith("image/")) {
-      setError("Please select a valid image file.");
-      return;
-    }
-
-    if (nextFile.size > MAX_FILE_SIZE) {
-      setError("Maximum image size is 15 MB.");
-      return;
     }
 
     const url = URL.createObjectURL(nextFile);
@@ -81,12 +85,13 @@ export default function ImageResizer() {
       setOutputPreviewUrl(null);
       setOutputPreviewSize(0);
       setOutputPreviewDimensions(null);
+      setError("");
       URL.revokeObjectURL(url);
     };
 
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      setError("The image could not be read. Try another file.");
+      showToast("error", "Failed to load image. Please try another file.");
     };
 
     image.src = url;
@@ -246,14 +251,6 @@ export default function ImageResizer() {
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="min-w-0 rounded-2xl border border-white/10 bg-[#11141c] p-4 sm:p-5">
-        {error && (
-          <p
-            role="alert"
-            className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-          >
-            {error}
-          </p>
-        )}
         {previewUrl && file ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">

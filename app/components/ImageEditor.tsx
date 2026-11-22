@@ -505,7 +505,11 @@ export default function ImageEditor({
       if (error instanceof DOMException && error.name === "AbortError") {
         // Cancelled cleanly by user, update toast to warning
         if (cancelToastIdRef.current) {
-          updateToast(cancelToastIdRef.current, "warning", "Object removal cancelled.");
+          updateToast(
+            cancelToastIdRef.current,
+            "warning",
+            "Object removal cancelled.",
+          );
           cancelToastIdRef.current = null;
         } else {
           showToast("warning", "Object removal cancelled.");
@@ -808,7 +812,9 @@ export default function ImageEditor({
         {resultUrl && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="font-semibold text-white">Result Comparison</h3>
+              <h3 className="font-semibold text-white">
+                Before / After Comparison
+              </h3>
               <div className="flex rounded-lg border border-white/10 p-1">
                 <button
                   type="button"
