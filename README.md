@@ -10,6 +10,7 @@
 
 > **A 100% private, client-side image manipulation and AI studio running entirely in your browser with zero backend requirements.**
 
+🔗 **Live Demo:** [https://image-toolkit-studio.vercel.app/](https://image-toolkit-studio.vercel.app/)  
 📁 **Repository:** [https://github.com/SalmanFrs/image-toolkit](https://github.com/SalmanFrs/image-toolkit)
 
 ---
