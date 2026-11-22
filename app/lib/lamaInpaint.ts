@@ -15,6 +15,24 @@ const CACHE_NAME = "image-toolkit-ai-models-v1";
 
 let cachedSession: ort.InferenceSession | null = null;
 
+/**
+ * Checks whether the LaMa model is already cached in browser Cache API.
+ */
+export async function isModelCached(
+  modelUrl: string = DEFAULT_MODEL_URL,
+): Promise<boolean> {
+  if (typeof window !== "undefined" && "caches" in window) {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const match = await cache.match(modelUrl);
+      return !!match;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 // ── Public progress interface ──────────────────────────────────────
 export interface InpaintProgress {
   phase: "downloading" | "loading" | "preparing" | "inferring" | "compositing";
@@ -30,7 +48,12 @@ type ProgressCallback = (progress: InpaintProgress) => void;
 async function fetchModelBuffer(
   modelUrl: string,
   onProgress?: ProgressCallback,
+  signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   // Try Cache API first
   if (typeof window !== "undefined" && "caches" in window) {
     try {
@@ -38,6 +61,9 @@ async function fetchModelBuffer(
       const cachedResponse = await cache.match(modelUrl);
 
       if (cachedResponse) {
+        if (signal?.aborted) {
+          throw new DOMException("Aborted", "AbortError");
+        }
         onProgress?.({
           phase: "downloading",
           message: "Loading AI model from device cache...",
@@ -53,7 +79,7 @@ async function fetchModelBuffer(
         loadedMB: 0,
       });
 
-      const response = await fetch(modelUrl);
+      const response = await fetch(modelUrl, { signal });
       if (!response.ok) {
         throw new Error(`Failed to download AI model (HTTP ${response.status})`);
       }
@@ -69,6 +95,11 @@ async function fetchModelBuffer(
         let loaded = 0;
 
         for (;;) {
+          if (signal?.aborted) {
+            await reader.cancel().catch(() => {});
+            throw new DOMException("Aborted", "AbortError");
+          }
+
           const { done, value } = await reader.read();
           if (done) break;
           chunks.push(value);
@@ -84,6 +115,10 @@ async function fetchModelBuffer(
             loadedMB,
             totalMB,
           });
+        }
+
+        if (signal?.aborted) {
+          throw new DOMException("Aborted", "AbortError");
         }
 
         // Merge chunks into single buffer
@@ -115,20 +150,30 @@ async function fetchModelBuffer(
 
       // Fallback: no ReadableStream support
       const buf = await response.arrayBuffer();
+      if (signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
       await cache.put(modelUrl, new Response(buf, { headers: { "Content-Type": "application/octet-stream" } }));
       return buf;
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw err;
+      }
       console.warn("Cache API warning, fallback to direct fetch:", err);
     }
   }
 
   // Final fallback (no Cache API)
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   onProgress?.({
     phase: "downloading",
     message: "Downloading AI model...",
     percent: 0,
   });
-  const response = await fetch(modelUrl);
+  const response = await fetch(modelUrl, { signal });
   if (!response.ok) {
     throw new Error(`Failed to download AI model (HTTP ${response.status})`);
   }
@@ -139,8 +184,12 @@ async function fetchModelBuffer(
 async function getSession(
   modelUrl: string,
   onProgress?: ProgressCallback,
+  signal?: AbortSignal,
 ): Promise<ort.InferenceSession> {
   if (cachedSession) {
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
     onProgress?.({
       phase: "loading",
       message: "AI model is ready...",
@@ -149,7 +198,11 @@ async function getSession(
     return cachedSession;
   }
 
-  const buffer = await fetchModelBuffer(modelUrl, onProgress);
+  const buffer = await fetchModelBuffer(modelUrl, onProgress, signal);
+
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
 
   onProgress?.({
     phase: "loading",
@@ -537,7 +590,12 @@ async function inpaintClusterRoi(
   maskCanvas: HTMLCanvasElement,
   roi: ROI,
   onProgress?: ProgressCallback,
+  signal?: AbortSignal,
 ): Promise<void> {
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   const { x: rx, y: ry, w: rw, h: rh } = roi;
 
   // 1. Crop image from workingCanvas at (rx, ry, rw, rh)
@@ -556,8 +614,16 @@ async function inpaintClusterRoi(
   if (!roiMaskCtx) throw new Error("Failed to create mask ROI canvas.");
   roiMaskCtx.drawImage(maskCanvas, rx, ry, rw, rh, 0, 0, rw, rh);
 
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   // 3. Run 512x512 inference
   const out512Canvas = await runInferenceOnCanvas(session, roiImgCanvas, roiMaskCanvas, onProgress);
+
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
 
   onProgress?.({
     phase: "compositing",
@@ -622,6 +688,10 @@ async function inpaintClusterRoi(
   patchResultCtx.imageSmoothingQuality = "high";
   patchResultCtx.drawImage(out512Canvas, 0, 0, rw, rh);
 
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   // Composite patchResult directly onto workingCanvas at (rx, ry)
   const workingCtx = workingCanvas.getContext("2d");
   if (!workingCtx) throw new Error("Failed to access working canvas context.");
@@ -633,9 +703,19 @@ export async function runLamaInpaint(
   originalCanvas: HTMLCanvasElement,
   maskCanvas: HTMLCanvasElement,
   onProgress?: ProgressCallback,
+  outputMimeType: string = "image/png",
+  signal?: AbortSignal,
 ): Promise<string> {
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   const modelUrl = DEFAULT_MODEL_URL;
-  const session = await getSession(modelUrl, onProgress);
+  const session = await getSession(modelUrl, onProgress, signal);
+
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
 
   const origWidth = originalCanvas.width;
   const origHeight = originalCanvas.height;
@@ -677,6 +757,10 @@ export async function runLamaInpaint(
 
   // 4. Sequential execution for each cluster ROI
   for (let i = 0; i < clusterRois.length; i++) {
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
     const roi = clusterRois[i];
     if (clusterRois.length > 1) {
       onProgress?.({
@@ -688,14 +772,24 @@ export async function runLamaInpaint(
       await new Promise((r) => setTimeout(r, 50));
     }
 
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
     await inpaintClusterRoi(
       session,
       workingCanvas,
       maskCanvas,
       roi,
       onProgress,
+      signal,
     );
   }
 
-  return workingCanvas.toDataURL("image/png");
+  if (signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
+  const quality = outputMimeType === "image/png" ? undefined : 0.92;
+  return workingCanvas.toDataURL(outputMimeType, quality);
 }

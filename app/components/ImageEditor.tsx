@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { runLamaInpaint } from "../lib/lamaInpaint";
+import { isModelCached, runLamaInpaint } from "../lib/lamaInpaint";
 import type { InpaintProgress } from "../lib/lamaInpaint";
+import { useToast } from "./Toast";
 
 type Point = {
   x: number;
@@ -18,6 +19,7 @@ type EditorMode = "remove";
 
 type ImageEditorProps = {
   imageUrl: string;
+  fileName?: string;
   mode: EditorMode;
 };
 
@@ -35,7 +37,11 @@ const PHASE_STEPS: {
   { key: "compositing", label: "Compose" },
 ];
 
-export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
+export default function ImageEditor({
+  imageUrl,
+  fileName = "image",
+  mode,
+}: ImageEditorProps) {
   const imageCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -45,6 +51,7 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
   const drawingRef = useRef(false);
   const comparisonContainerRef = useRef<HTMLDivElement>(null);
   const draggingComparisonRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [brushSize, setBrushSize] = useState(40);
   const [strokeCount, setStrokeCount] = useState(0);
@@ -59,10 +66,26 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
   const [progress, setProgress] = useState<InpaintProgress | null>(null);
   const [processingError, setProcessingError] = useState("");
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [resultExt, setResultExt] = useState("png");
   const [comparisonMode, setComparisonMode] = useState<
-    "slider" | "side-by-side"
+    "slider" | "before-after"
   >("slider");
   const [comparisonPosition, setComparisonPosition] = useState(50);
+  const [isCached, setIsCached] = useState<boolean | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const { showToast, updateToast } = useToast();
+  const cancelToastIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    isModelCached().then((cached) => {
+      if (active) setIsCached(cached);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     setResultUrl(null);
@@ -392,7 +415,15 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
       return;
     }
 
+    if (isCached === false) {
+      const confirmed = window.confirm(
+        "First-time use will download the LaMa AI model (~198 MB) once and cache it locally in your browser. Do you want to proceed?",
+      );
+      if (!confirmed) return;
+    }
+
     setIsProcessing(true);
+    setIsCancelling(false);
     setProcessingError("");
     setProgress({
       phase: "preparing",
@@ -400,8 +431,11 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
       percent: 0,
     });
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      // Buat canvas resolusi penuh untuk gambar asli
+      // Create full-resolution canvas for the original image
       const originalImg = new Image();
       await new Promise<void>((resolve, reject) => {
         originalImg.onload = () => resolve();
@@ -409,6 +443,10 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
           reject(new Error("Failed to load original image data."));
         originalImg.src = imageUrl;
       });
+
+      if (controller.signal.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
 
       const fullOriginalCanvas = document.createElement("canvas");
       fullOriginalCanvas.width = originalImg.naturalWidth;
@@ -419,7 +457,7 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
       }
       fullOrigCtx.drawImage(originalImg, 0, 0);
 
-      // Skalakan mask canvas ke resolusi penuh gambar asli
+      // Scale mask canvas to full resolution of the original image
       const fullMaskCanvas = document.createElement("canvas");
       fullMaskCanvas.width = originalImg.naturalWidth;
       fullMaskCanvas.height = originalImg.naturalHeight;
@@ -436,25 +474,67 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
         originalImg.naturalHeight,
       );
 
-      // Jalankan LaMa Inpainting client-side (100% di browser)
+      // Detect output format matching the input file (jpg/jpeg -> image/jpeg, webp -> image/webp, else png)
+      const lowerName = fileName.toLowerCase();
+      let targetMime = "image/png";
+      let ext = "png";
+
+      if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+        targetMime = "image/jpeg";
+        ext = "jpg";
+      } else if (lowerName.endsWith(".webp")) {
+        targetMime = "image/webp";
+        ext = "webp";
+      }
+
+      // Execute client-side LaMa Inpainting (100% in browser)
       const outputDataUrl = await runLamaInpaint(
         fullOriginalCanvas,
         fullMaskCanvas,
         (p) => setProgress(p),
+        targetMime,
+        controller.signal,
       );
 
+      setIsCached(true);
+      setResultExt(ext);
       setResultUrl(outputDataUrl);
+      setComparisonPosition(50);
+      showToast("success", "Object removed successfully.");
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        // Cancelled cleanly by user, update toast to warning
+        if (cancelToastIdRef.current) {
+          updateToast(cancelToastIdRef.current, "warning", "Object removal cancelled.");
+          cancelToastIdRef.current = null;
+        } else {
+          showToast("warning", "Object removal cancelled.");
+        }
+        return;
+      }
+
       console.error("Image processing failed:", error);
 
+      showToast("error", "Failed to remove object. Please try again.");
       setProcessingError(
         error instanceof Error
           ? error.message
           : "An error occurred while processing the image.",
       );
     } finally {
+      abortControllerRef.current = null;
       setIsProcessing(false);
+      setIsCancelling(false);
       setProgress(null);
+    }
+  };
+
+  const handleCancelProcessing = () => {
+    if (abortControllerRef.current && !isCancelling) {
+      setIsCancelling(true);
+      const toastId = showToast("loading", "Cancelling object removal...");
+      cancelToastIdRef.current = toastId;
+      abortControllerRef.current.abort();
     }
   };
 
@@ -540,7 +620,10 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
             </span>
           </div>
           <p className="mt-2 text-xs leading-5 text-gray-400">
-            Powered by LaMa AI via ONNX Runtime WebAssembly running 100% locally in your browser. Complete privacy with zero server uploads—the AI model is downloaded once, cached in your browser via the Cache API, and composited using Smart ROI preserving full HD resolution.
+            Powered by LaMa AI via ONNX Runtime WebAssembly running 100% locally
+            in your browser. Complete privacy with zero server uploads, the AI
+            model is downloaded once, cached in your browser via the Cache API,
+            and composited using Smart ROI preserving full HD resolution.
           </p>
         </div>
 
@@ -608,6 +691,22 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
       </div>
 
       <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+        {isCached === true && (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400" />
+            <span>AI Model Ready (Cached locally)</span>
+          </div>
+        )}
+        {isCached === false && (
+          <div className="flex items-start gap-2 rounded-lg border border-violet-400/20 bg-violet-400/5 p-3 text-xs text-gray-300">
+            <span className="mt-0.5 text-violet-400">ℹ</span>
+            <span>
+              First-time use downloads the AI model (~198 MB) once and caches it
+              locally in your browser.
+            </span>
+          </div>
+        )}
+
         <button
           onClick={processImage}
           disabled={
@@ -615,7 +714,9 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
           }
           className="w-full rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isProcessing ? "Processing Image..." : "Remove Object with AI (LaMa)"}
+          {isProcessing
+            ? "Processing Image..."
+            : "Remove Object with AI (LaMa)"}
         </button>
 
         {/* ── Progress UI ─────────────────────────────────────────── */}
@@ -627,7 +728,10 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
                 const isActive = idx === currentPhaseIndex;
                 const isDone = idx < currentPhaseIndex;
                 return (
-                  <div key={step.key} className="flex flex-1 flex-col items-center gap-1.5">
+                  <div
+                    key={step.key}
+                    className="flex flex-1 flex-col items-center gap-1.5"
+                  >
                     <div
                       className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
                         isDone
@@ -641,7 +745,11 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
                     </div>
                     <span
                       className={`text-[10px] leading-tight ${
-                        isActive ? "font-semibold text-violet-300" : isDone ? "text-violet-400" : "text-gray-500"
+                        isActive
+                          ? "font-semibold text-violet-300"
+                          : isDone
+                            ? "text-violet-400"
+                            : "text-gray-500"
                       }`}
                     >
                       {step.label}
@@ -663,18 +771,30 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
               />
             </div>
 
-            {/* Status text */}
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-violet-300">{progress.message}</span>
-              <span className="tabular-nums text-gray-400">
-                {progress.phase === "downloading" && progress.loadedMB != null
-                  ? progress.totalMB != null
-                    ? `${progress.loadedMB} / ${progress.totalMB} MB`
-                    : `${progress.loadedMB} MB`
-                  : progress.percent != null
-                    ? `${progress.percent}%`
-                    : ""}
+            {/* Status text and cancel button */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs">
+              <span className="min-w-0 truncate text-violet-300">
+                {progress.message}
               </span>
+              <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                <span className="tabular-nums whitespace-nowrap text-gray-400">
+                  {progress.phase === "downloading" && progress.loadedMB != null
+                    ? progress.totalMB != null
+                      ? `${progress.loadedMB} / ${progress.totalMB} MB`
+                      : `${progress.loadedMB} MB`
+                    : progress.percent != null
+                      ? `${progress.percent}%`
+                      : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCancelProcessing}
+                  disabled={isCancelling}
+                  className="rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-300 transition hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isCancelling ? "Cancelling..." : "Cancel"}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -688,7 +808,7 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
         {resultUrl && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="font-semibold text-white">Before and After</h3>
+              <h3 className="font-semibold text-white">Result Comparison</h3>
               <div className="flex rounded-lg border border-white/10 p-1">
                 <button
                   type="button"
@@ -699,10 +819,10 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setComparisonMode("side-by-side")}
-                  className={`rounded-md px-3 py-2 text-xs font-medium transition ${comparisonMode === "side-by-side" ? "bg-violet-500 text-white" : "text-gray-300 hover:bg-white/10"}`}
+                  onClick={() => setComparisonMode("before-after")}
+                  className={`rounded-md px-3 py-2 text-xs font-medium transition ${comparisonMode === "before-after" ? "bg-violet-500 text-white" : "text-gray-300 hover:bg-white/10"}`}
                 >
-                  Side by side
+                  Before / After
                 </button>
               </div>
             </div>
@@ -787,11 +907,26 @@ export default function ImageEditor({ imageUrl, mode }: ImageEditorProps) {
             )}
 
             <a
-              href={resultUrl}
-              download="image-toolkit-result.png"
-              className="block rounded-xl border border-white/10 px-4 py-3 text-center text-sm font-medium text-gray-200 transition hover:bg-white/10"
+              href={isProcessing ? undefined : resultUrl}
+              download={
+                isProcessing
+                  ? undefined
+                  : `${fileName.replace(/\.[^/.]+$/, "") || "image"}-object-remover-result.${resultExt}`
+              }
+              aria-disabled={isProcessing}
+              onClick={() => {
+                if (!isProcessing) {
+                  const outName = `${fileName.replace(/\.[^/.]+$/, "") || "image"}-object-remover-result.${resultExt}`;
+                  showToast("success", `Download started: ${outName}`);
+                }
+              }}
+              className={`block rounded-xl bg-violet-600 px-4 py-3 text-center text-sm font-semibold text-white transition shadow-md ${
+                isProcessing
+                  ? "cursor-not-allowed opacity-50 pointer-events-none"
+                  : "hover:bg-violet-500 hover:shadow-violet-500/20"
+              }`}
             >
-              Download Result PNG
+              Download Result {resultExt.toUpperCase()}
             </a>
           </div>
         )}

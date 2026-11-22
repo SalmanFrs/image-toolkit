@@ -1,12 +1,12 @@
 # Image Toolkit
 
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime_Web-WASM-005CED?style=for-the-badge&logo=onnx&logoColor=white)](https://onnxruntime.ai/)
-[![WebAssembly](https://img.shields.io/badge/WebAssembly-WASM-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+![Next.js](https://img.shields.io/badge/NEXT.JS%2016-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/REACT%2019-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TYPESCRIPT%205-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/TAILWIND%20CSS%204-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![ONNX Runtime Web](https://img.shields.io/badge/ONNX%20RUNTIME%20WEB-005CED?style=for-the-badge&logo=onnx&logoColor=white)
+![WebAssembly](https://img.shields.io/badge/WEBASSEMBLY-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)
+![Vercel](https://img.shields.io/badge/VERCEL-000000?style=for-the-badge&logo=vercel&logoColor=white)
 
 > **A 100% private, client-side image manipulation and AI studio running entirely in your browser with zero backend requirements.**
 
@@ -21,8 +21,10 @@
 
 - **100% Client-Side Privacy**: All processing occurs locally within the user's browser via HTML5 Canvas, WebAssembly (WASM), and browser APIs. No photos or media files are ever uploaded to any external server.
 - **In-Browser Deep Learning (LaMa ONNX)**: Eliminates the need for expensive Python servers or cloud GPU clusters by executing the Large Mask Inpainting (LaMa) model directly in the browser via `onnxruntime-web`.
-- **Persistent Local AI Caching**: Models are streamed once and cached in the browser's native `Cache API`, enabling instantaneous offline-ready processing on subsequent uses.
+- **Persistent Local AI Caching**: Models are streamed once (~198 MB) and cached in the browser's native `Cache API`, enabling instantaneous offline-ready processing on subsequent uses with clear cache-status indicators.
 - **High-Resolution Smart ROI Compositing**: Eliminates blurry upscaling by automatically isolating stroke clusters, running localized 512×512 inpainting on square ROIs, and blending seamless feathered patches back onto the full original HD canvas.
+- **Non-Intrusive Toast Feedback**: Lightweight, zero-dependency toast notification system (`fixed bottom-4 right-4`) delivering instant status updates across all processing, cancellation, and download events.
+- **Consistent Output Naming**: All processed exports are uniformly saved with the `{originalName}-{featureName}-result.{ext}` pattern.
 
 ---
 
@@ -36,10 +38,11 @@ Remove unwanted objects, watermarks, text, or photo-bombers with an intelligent 
 - **Dedicated Background Web Worker**: Runs WASM inference in an isolated thread (`ort.env.wasm.proxy = true`) preventing UI freezes or browser "Page Unresponsive" warnings.
 - **Multi-Region & Cluster Detection**: Employs downsampled 128×128 connected-component clustering (BFS). Distinct, distant markings (such as logos in opposite corners) are automatically isolated and sequentially inpainted without downsampling the whole image.
 - **Smart ROI & Feathered Compositing**: Restricts inpainting to square padded patches around each mask cluster, applying a 2px feathered alpha mask so surrounding HD pixels remain 100% untouched.
-- **Real-Time UX Telemetry**: Features real-time download progress with MB counter and completion percentage, a phase-based stepper (Download → Load AI → Prepare → Infer → Compose), and a pulsing scanline overlay.
+- **Real-Time UX Telemetry & Cancel Support**: Features real-time download progress with MB counter and completion percentage, a phase-based stepper (Download -> Load AI -> Prepare -> Infer -> Compose), a pulsing scanline overlay, and instant user cancellation support powered by `AbortController`.
 - **Interactive Visual Comparison**:
   - **Split-Screen Slider**: Smooth horizontal before/after draggable divider to inspect boundaries.
-  - **Side-by-Side Mode**: Synchronized viewports for side-by-side comparison.
+  - **Before / After Mode**: Synchronized viewports for direct before/after comparison on desktop and mobile.
+- **Standardized Export**: Saves directly as `{fileName}-object-remover-result.{ext}` matching the original input format (PNG, JPG, or WebP).
 
 ### 2. 📐 Smart Image Resizer
 
@@ -49,15 +52,18 @@ High-fidelity client-side image scaling designed for speed and web optimization.
 - **Multi-Format Export**: Convert seamlessly across **PNG**, **JPG**, and **WebP** with auto-detection of the uploaded format.
 - **Quality & Compression Controls**: Granular compression quality slider for lossy formats (JPG/WebP) with clean background fills.
 - **Real-Time Output Preview**: Inspect resulting output image dimensions, visual sharpness, and calculated byte size before downloading.
+- **Standardized Export**: Saves directly as `{fileName}-resized-result.{ext}`.
 
 ### 3. ✂️ Interactive Image Cropper
 
 Crop, reframe, and orient images with sub-pixel precision powered by `react-easy-crop`.
 
 - **8 Aspect Ratio Presets**: Choose between **Original**, **1:1 (Square)**, **4:3**, **16:9 (Widescreen)**, **3:2**, **2:3 (Portrait)**, **3:4**, and **9:16 (Stories/Reels)**, or freeform cropping.
-- **Transformation Tools**: Smooth zoom magnification and 90° clockwise/counter-clockwise hardware-accelerated canvas rotation.
+- **Accidental Rotation Prevention on Mobile**: Pinch gesture is strictly restricted to zoom in/out with bounded positions, while canvas rotation is deliberately controlled via 90° clockwise/counter-clockwise buttons.
+- **Bounded Canvas Clamping**: Clamps crop boundaries to prevent white background margins in export.
 - **Live Output Telemetry**: Live display of cropped pixel width/height and crop coordinate telemetry.
 - **Preview & Format Export**: Dedicated full-resolution preview with output format selection (PNG/JPG/WebP).
+- **Standardized Export**: Saves directly as `{fileName}-cropped-result.{ext}`.
 
 ### 4. 📦 Batch Format Converter
 
@@ -66,7 +72,7 @@ Convert and compress image collections in parallel entirely within the user's br
 - **Multi-File Queue**: Drag and drop up to 20 images simultaneously (max 15 MB per file).
 - **Client-Side Bulk Conversion**: Rapid parallel rasterization to PNG, JPG, or WebP with global compression quality tuning.
 - **Storage Metrics**: Direct comparison showing original vs. converted byte sizes and percentage saved.
-- **Flexible Downloads**: Download individual converted files or package the entire batch into a single `.ZIP` archive on the fly using `JSZip`.
+- **Flexible Downloads**: Download individual converted files as `{fileName}-converted-result.{ext}` or package the entire batch into a single archive (`image-toolkit-converted.zip`) on the fly using `JSZip`.
 
 ---
 

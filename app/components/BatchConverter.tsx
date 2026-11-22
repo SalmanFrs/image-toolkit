@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
+import { useToast } from "./Toast";
 
 type OutputFormat = "image/png" | "image/jpeg" | "image/webp";
 
@@ -56,7 +57,7 @@ async function convertFileToBlob(
     throw new Error("Canvas context unavailable.");
   }
 
-  // Isi background putih jika output JPG agar area transparan tidak jadi hitam
+  // Fill with white background for JPG output so transparent areas do not turn black
   if (format === "image/jpeg") {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -90,12 +91,13 @@ export default function BatchConverter() {
   const [error, setError] = useState("");
   const [isConverting, setIsConverting] = useState(false);
   const [isZipping, setIsZipping] = useState(false);
+  const { showToast, updateToast } = useToast();
 
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
-  // Bersihkan seluruh object URL saat komponen unmount
+  // Clean up all object URLs when component unmounts
   useEffect(() => {
     return () => {
       itemsRef.current.forEach((item) => {
@@ -192,9 +194,11 @@ export default function BatchConverter() {
     setError("");
 
     const currentItems = [...items];
+    let successCount = 0;
+    let failureCount = 0;
 
     for (const current of currentItems) {
-      // Tandai item sedang diproses
+      // Mark item as converting
       setItems((prev) =>
         prev.map((item) =>
           item.id === current.id
@@ -210,6 +214,7 @@ export default function BatchConverter() {
           quality,
         );
         const convertedUrl = URL.createObjectURL(blob);
+        successCount++;
 
         setItems((prev) =>
           prev.map((item) => {
@@ -228,6 +233,7 @@ export default function BatchConverter() {
           }),
         );
       } catch (err) {
+        failureCount++;
         const message =
           err instanceof Error ? err.message : "Conversion failed.";
         setItems((prev) =>
@@ -240,6 +246,14 @@ export default function BatchConverter() {
       }
     }
 
+    if (successCount > 0 && failureCount === 0) {
+      showToast("success", `Converted ${successCount} image(s) successfully.`);
+    } else if (successCount > 0 && failureCount > 0) {
+      showToast("warning", `Converted ${successCount} image(s), ${failureCount} failed.`);
+    } else {
+      showToast("error", "Failed to convert images.");
+    }
+
     setIsConverting(false);
   }
 
@@ -248,13 +262,15 @@ export default function BatchConverter() {
 
     const baseName = item.file.name.replace(/\.[^/.]+$/, "") || "image";
     const ext = getExtension(item.convertedFormat);
+    const downloadFileName = `${baseName}-converted-result.${ext}`;
 
     const link = document.createElement("a");
     link.href = item.convertedUrl;
-    link.download = `${baseName}.${ext}`;
+    link.download = downloadFileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    showToast("success", `Download started: ${downloadFileName}`);
   }
 
   const convertedCount = items.filter(
@@ -269,6 +285,8 @@ export default function BatchConverter() {
 
     if (convertedItems.length === 0 || isZipping) return;
 
+    const zipToastId = showToast("loading", "Creating ZIP archive...");
+
     try {
       setIsZipping(true);
       setError("");
@@ -281,7 +299,7 @@ export default function BatchConverter() {
         const ext = getExtension(item.convertedFormat!);
         const initialName = `${baseName}.${ext}`;
 
-        // Cegah nama file duplikat saling menimpa di dalam ZIP
+        // Prevent duplicate file names from overwriting inside ZIP
         const count = usedNames.get(initialName) ?? 0;
         usedNames.set(initialName, count + 1);
 
@@ -302,7 +320,9 @@ export default function BatchConverter() {
       document.body.removeChild(link);
 
       URL.revokeObjectURL(zipUrl);
+      updateToast(zipToastId, "success", "ZIP archive downloaded.");
     } catch {
+      updateToast(zipToastId, "error", "Failed to create ZIP archive.");
       setError("Failed to create ZIP archive.");
     } finally {
       setIsZipping(false);
@@ -311,7 +331,7 @@ export default function BatchConverter() {
 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-      {/* Area Upload & Daftar Gambar */}
+      {/* Upload Area & Image List */}
       <div className="min-w-0 rounded-2xl border border-white/10 bg-[#11141c] p-4 sm:p-5">
         {error && (
           <p
@@ -348,7 +368,7 @@ export default function BatchConverter() {
                   type="button"
                   onClick={handleClearAll}
                   disabled={isConverting}
-                  className="rounded-lg px-3 py-2 text-sm text-gray-400 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg border border-white/15 px-3 py-2 text-sm text-gray-300 transition hover:border-white/30 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Clear All
                 </button>
@@ -539,7 +559,7 @@ export default function BatchConverter() {
           type="button"
           onClick={handleDownloadAllZip}
           disabled={convertedCount === 0 || isConverting || isZipping}
-          className="w-full rounded-xl border border-violet-400/40 bg-violet-500/10 px-4 py-3 text-sm font-medium text-violet-300 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-violet-500 hover:shadow-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isZipping
             ? "Creating ZIP..."

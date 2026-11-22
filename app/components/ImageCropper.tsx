@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Cropper, { type Area } from "react-easy-crop";
+import { useToast } from "./Toast";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
@@ -37,7 +38,7 @@ async function getCroppedImageBlob(
   const image = await createImage(imageSrc);
   const rotRad = getRadianAngle(rotation);
 
-  // 1. Buat canvas sementara untuk menggambar gambar yang sudah dirotasi
+  // 1. Create temporary canvas to draw rotated image
   const { width: bBoxWidth, height: bBoxHeight } = rotateSize(
     image.width,
     image.height,
@@ -45,8 +46,10 @@ async function getCroppedImageBlob(
   );
 
   const rotCanvas = document.createElement("canvas");
-  rotCanvas.width = Math.round(bBoxWidth);
-  rotCanvas.height = Math.round(bBoxHeight);
+  const rotW = Math.round(bBoxWidth);
+  const rotH = Math.round(bBoxHeight);
+  rotCanvas.width = rotW;
+  rotCanvas.height = rotH;
   const rotCtx = rotCanvas.getContext("2d");
 
   if (!rotCtx) return null;
@@ -56,15 +59,21 @@ async function getCroppedImageBlob(
   rotCtx.translate(-image.width / 2, -image.height / 2);
   rotCtx.drawImage(image, 0, 0);
 
-  // 2. Buat canvas akhir sesuai ukuran area crop
+  // Clamp crop rectangle within rotated canvas bounds to avoid white margins
+  const cropX = Math.max(0, Math.min(Math.round(pixelCrop.x), rotW));
+  const cropY = Math.max(0, Math.min(Math.round(pixelCrop.y), rotH));
+  const cropW = Math.max(1, Math.min(Math.round(pixelCrop.width), rotW - cropX));
+  const cropH = Math.max(1, Math.min(Math.round(pixelCrop.height), rotH - cropY));
+
+  // 2. Create final canvas according to crop dimensions
   const outputCanvas = document.createElement("canvas");
-  outputCanvas.width = Math.round(pixelCrop.width);
-  outputCanvas.height = Math.round(pixelCrop.height);
+  outputCanvas.width = cropW;
+  outputCanvas.height = cropH;
   const outputCtx = outputCanvas.getContext("2d");
 
   if (!outputCtx) return null;
 
-  // Isi background putih jika output JPG agar area transparan tidak jadi hitam
+  // Fill with white background for JPG output so transparent areas do not turn black
   if (format === "image/jpeg") {
     outputCtx.fillStyle = "#ffffff";
     outputCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
@@ -72,14 +81,14 @@ async function getCroppedImageBlob(
 
   outputCtx.drawImage(
     rotCanvas,
-    Math.round(pixelCrop.x),
-    Math.round(pixelCrop.y),
-    Math.round(pixelCrop.width),
-    Math.round(pixelCrop.height),
+    cropX,
+    cropY,
+    cropW,
+    cropH,
     0,
     0,
-    outputCanvas.width,
-    outputCanvas.height,
+    cropW,
+    cropH,
   );
 
   return new Promise((resolve) => {
@@ -111,6 +120,7 @@ export default function ImageCropper() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewSize, setPreviewSize] = useState(0);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const { showToast } = useToast();
 
   // Aspect ratio settings
   const [aspectRatio, setAspectRatio] = useState(4 / 3);
@@ -273,6 +283,7 @@ export default function ImageCropper() {
       );
 
       if (!blob) {
+        showToast("error", "Failed to crop image.");
         setError("Failed to process cropped image.");
         return;
       }
@@ -284,15 +295,19 @@ export default function ImageCropper() {
       };
 
       const baseName = fileName.replace(/\.[^/.]+$/, "") || "image";
+      const downloadFileName = `${baseName}-cropped-result.${extensionMap[outputFormat]}`;
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = downloadUrl;
-      link.download = `${baseName}-cropped.${extensionMap[outputFormat]}`;
+      link.download = downloadFileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(downloadUrl);
+      showToast("success", "Image cropped successfully.");
+      showToast("success", `Download started: ${downloadFileName}`);
     } catch {
+      showToast("error", "Failed to crop image.");
       setError("An error occurred while cropping the image.");
     } finally {
       setIsCropping(false);
@@ -326,14 +341,14 @@ export default function ImageCropper() {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => inputRef.current?.click()}
-                  className="rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/10"
+                  className="rounded-lg border border-white/15 px-3 py-2 text-sm text-gray-300 transition hover:border-white/30 hover:bg-white/10"
                 >
                   Replace Image
                 </button>
 
                 <button
                   onClick={resetImage}
-                  className="rounded-lg px-3 py-2 text-sm text-gray-400 transition hover:bg-white/5 hover:text-white"
+                  className="rounded-lg border border-white/15 px-3 py-2 text-sm text-gray-300 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
                 >
                   Remove image and start over
                 </button>
@@ -348,9 +363,9 @@ export default function ImageCropper() {
                 zoom={zoom}
                 rotation={rotation}
                 aspect={aspectRatio}
+                restrictPosition={true}
                 onCropChange={handleCropChange}
                 onZoomChange={handleZoomChange}
-                onRotationChange={handleRotationChange}
                 onCropComplete={handleCropComplete}
                 objectFit="contain"
                 showGrid
@@ -534,7 +549,7 @@ export default function ImageCropper() {
             setPreviewSize(0);
           }}
           disabled={!imageUrl}
-          className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-gray-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+          className="w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-medium text-gray-300 transition hover:border-white/30 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Reset Crop
         </button>

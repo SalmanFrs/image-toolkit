@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useToast } from "./Toast";
 
 type OutputFormat = "image/png" | "image/jpeg" | "image/webp";
 
@@ -24,6 +25,7 @@ export default function ImageResizer() {
     height: number;
   } | null>(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (!file) {
@@ -220,13 +222,17 @@ export default function ImageResizer() {
             ? "webp"
             : "png";
       const baseName = file.name.replace(/\.[^.]+$/, "") || "image";
+      const downloadFileName = `${baseName}-resized-result.${extension}`;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${baseName}-${width}x${height}.${extension}`;
+      link.download = downloadFileName;
       link.click();
       URL.revokeObjectURL(url);
+      showToast("success", "Image resized successfully.");
+      showToast("success", `Download started: ${downloadFileName}`);
     } catch (caught) {
+      showToast("error", "Failed to resize image.");
       setError(
         caught instanceof Error
           ? caught.message
@@ -269,14 +275,14 @@ export default function ImageResizer() {
                       inputRef.current.click();
                     }
                   }}
-                  className="rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition hover:bg-white/10"
+                  className="rounded-lg border border-white/15 px-3 py-2 text-sm text-gray-300 transition hover:border-white/30 hover:bg-white/10"
                 >
                   Replace Image
                 </button>
 
                 <button
                   onClick={resetImage}
-                  className="rounded-lg px-3 py-2 text-sm text-gray-400 transition hover:bg-white/5 hover:text-white"
+                  className="rounded-lg border border-white/15 px-3 py-2 text-sm text-gray-300 transition hover:border-white/30 hover:bg-white/10 hover:text-white"
                 >
                   Remove image and start over
                 </button>
