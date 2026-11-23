@@ -16,7 +16,6 @@ export default function ImageResizer() {
   const [keepRatio, setKeepRatio] = useState(true);
   const [format, setFormat] = useState<OutputFormat>("image/png");
   const [quality, setQuality] = useState(0.9);
-  const [error, setError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [outputPreviewUrl, setOutputPreviewUrl] = useState<string | null>(null);
   const [outputPreviewSize, setOutputPreviewSize] = useState(0);
@@ -28,14 +27,12 @@ export default function ImageResizer() {
   const { showToast } = useToast();
 
   useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   useEffect(() => {
     return () => {
@@ -79,14 +76,16 @@ export default function ImageResizer() {
     const image = new Image();
 
     image.onload = () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl(url);
       setWidth(image.naturalWidth);
       setHeight(image.naturalHeight);
       setFile(nextFile);
       setOutputPreviewUrl(null);
       setOutputPreviewSize(0);
       setOutputPreviewDimensions(null);
-      setError("");
-      URL.revokeObjectURL(url);
     };
 
     image.onerror = () => {
@@ -98,6 +97,10 @@ export default function ImageResizer() {
   }
 
   function resetImage() {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
     setFile(null);
     setWidth(0);
     setHeight(0);
@@ -107,7 +110,6 @@ export default function ImageResizer() {
     setOutputPreviewUrl(null);
     setOutputPreviewSize(0);
     setOutputPreviewDimensions(null);
-    setError("");
 
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -194,7 +196,6 @@ export default function ImageResizer() {
   async function handleGeneratePreview() {
     if (!file) return;
     setIsGeneratingPreview(true);
-    setError("");
 
     try {
       const blob = await createResizedBlob();
@@ -203,7 +204,8 @@ export default function ImageResizer() {
       setOutputPreviewSize(blob.size);
       setOutputPreviewDimensions({ width, height });
     } catch (caught) {
-      setError(
+      showToast(
+        "error",
         caught instanceof Error
           ? caught.message
           : "An error occurred while generating preview.",
@@ -216,7 +218,6 @@ export default function ImageResizer() {
   async function resizeImage() {
     if (!file) return;
     setIsProcessing(true);
-    setError("");
 
     try {
       const blob = await createResizedBlob();
@@ -236,13 +237,8 @@ export default function ImageResizer() {
       URL.revokeObjectURL(url);
       showToast("success", "Image resized successfully.");
       showToast("success", `Download started: ${downloadFileName}`);
-    } catch (caught) {
+    } catch {
       showToast("error", "Failed to resize image.");
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "An error occurred while resizing the image.",
-      );
     } finally {
       setIsProcessing(false);
     }
@@ -287,6 +283,7 @@ export default function ImageResizer() {
             </div>
 
             <div className="flex min-h-[340px] items-center justify-center rounded-xl border border-white/10 bg-[#090b10] p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={previewUrl}
                 alt="Preview of the image to be resized"
@@ -324,6 +321,7 @@ export default function ImageResizer() {
                 </div>
 
                 <div className="flex max-h-[360px] items-center justify-center overflow-hidden rounded-lg border border-white/5 bg-[#11141c] p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={outputPreviewUrl}
                     alt="Resized output preview"
@@ -336,7 +334,7 @@ export default function ImageResizer() {
         ) : (
           <button
             onClick={() => inputRef.current?.click()}
-            className="flex min-h-[380px] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-6 py-12 text-center transition hover:border-violet-400 hover:bg-violet-400/5"
+            className="flex min-h-95 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-6 py-12 text-center transition hover:border-violet-400 hover:bg-violet-400/5"
           >
             <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-500/10 text-3xl text-violet-300">
               ↑

@@ -106,7 +106,6 @@ export default function ImageCropper() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [fileSize, setFileSize] = useState(0);
-  const [error, setError] = useState("");
 
   // Crop settings
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -176,7 +175,6 @@ export default function ImageCropper() {
       setRotation(0);
       setPreviewUrl(null);
       setPreviewSize(0);
-      setError("");
     };
 
     image.onerror = () => {
@@ -201,7 +199,6 @@ export default function ImageCropper() {
     setSelectedRatio("Original");
     setPreviewUrl(null);
     setPreviewSize(0);
-    setError("");
 
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -214,10 +211,6 @@ export default function ImageCropper() {
 
   const handleZoomChange = useCallback((newZoom: number) => {
     setZoom(newZoom);
-  }, []);
-
-  const handleRotationChange = useCallback((newRotation: number) => {
-    setRotation(newRotation);
   }, []);
 
   function handleRotateLeft() {
@@ -240,7 +233,6 @@ export default function ImageCropper() {
 
     try {
       setIsGeneratingPreview(true);
-      setError("");
 
       const blob = await getCroppedImageBlob(
         imageUrl,
@@ -250,7 +242,7 @@ export default function ImageCropper() {
       );
 
       if (!blob) {
-        setError("Failed to generate crop preview.");
+        showToast("error", "Failed to generate crop preview.");
         return;
       }
 
@@ -258,7 +250,7 @@ export default function ImageCropper() {
       setPreviewUrl(url);
       setPreviewSize(blob.size);
     } catch {
-      setError("An error occurred while generating preview.");
+      showToast("error", "An error occurred while generating preview.");
     } finally {
       setIsGeneratingPreview(false);
     }
@@ -269,7 +261,6 @@ export default function ImageCropper() {
 
     try {
       setIsCropping(true);
-      setError("");
 
       const blob = await getCroppedImageBlob(
         imageUrl,
@@ -280,7 +271,6 @@ export default function ImageCropper() {
 
       if (!blob) {
         showToast("error", "Failed to crop image.");
-        setError("Failed to process cropped image.");
         return;
       }
 
@@ -304,7 +294,6 @@ export default function ImageCropper() {
       showToast("success", `Download started: ${downloadFileName}`);
     } catch {
       showToast("error", "Failed to crop image.");
-      setError("An error occurred while cropping the image.");
     } finally {
       setIsCropping(false);
     }
@@ -395,6 +384,7 @@ export default function ImageCropper() {
                 </div>
 
                 <div className="flex max-h-[360px] items-center justify-center overflow-hidden rounded-lg border border-white/5 bg-[#11141c] p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={previewUrl}
                     alt="Cropped output preview"
@@ -407,7 +397,7 @@ export default function ImageCropper() {
         ) : (
           <button
             onClick={() => inputRef.current?.click()}
-            className="flex min-h-[380px] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-6 py-12 text-center transition hover:border-violet-400 hover:bg-violet-400/5"
+            className="flex min-h-95 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-6 py-12 text-center transition hover:border-violet-400 hover:bg-violet-400/5"
           >
             <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-500/10 text-3xl text-violet-300">
               ↑

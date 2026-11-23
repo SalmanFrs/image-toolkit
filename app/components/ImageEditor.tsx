@@ -21,6 +21,9 @@ type ImageEditorProps = {
   imageUrl: string;
   fileName?: string;
   mode: EditorMode;
+  onReplaceImage?: () => void;
+  onRemoveImage?: () => void;
+  isReplacingDisabled?: boolean;
 };
 
 const MAX_PREVIEW_SIZE = 1600;
@@ -40,7 +43,9 @@ const PHASE_STEPS: {
 export default function ImageEditor({
   imageUrl,
   fileName = "image",
-  mode,
+  onReplaceImage,
+  onRemoveImage,
+  isReplacingDisabled,
 }: ImageEditorProps) {
   const imageCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -61,7 +66,6 @@ export default function ImageEditor({
   });
   const [imageError, setImageError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isDrawing, setIsDrawing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<InpaintProgress | null>(null);
   const [processingError, setProcessingError] = useState("");
@@ -73,6 +77,47 @@ export default function ImageEditor({
   const [comparisonPosition, setComparisonPosition] = useState(50);
   const [isCached, setIsCached] = useState<boolean | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // ── Canvas Zoom & Pan state ────────────────────────────────────────
+  const [toolMode, setToolMode] = useState<"brush" | "move">("brush");
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const isSpacePressedRef = useRef(false);
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const initialPinchDistRef = useRef<number | null>(null);
+  const initialPinchZoomRef = useRef<number>(1);
+  const canvasViewportRef = useRef<HTMLDivElement>(null);
+
+  const resetView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  const clampPan = useCallback(
+    (nextPan: { x: number; y: number }, currentZoom: number): { x: number; y: number } => {
+      if (currentZoom <= 1) return { x: 0, y: 0 };
+      const viewport = canvasViewportRef.current;
+      const canvas = imageCanvasRef.current;
+      if (!viewport || !canvas) return nextPan;
+
+      const containerWidth = viewport.clientWidth;
+      const containerHeight = viewport.clientHeight;
+      const baseWidth = canvas.offsetWidth;
+      const baseHeight = canvas.offsetHeight;
+
+      const maxX = Math.max(0, (baseWidth * currentZoom - containerWidth) / 2);
+      const maxY = Math.max(0, (baseHeight * currentZoom - containerHeight) / 2);
+
+      return {
+        x: Math.max(-maxX, Math.min(maxX, nextPan.x)),
+        y: Math.max(-maxY, Math.min(maxY, nextPan.y)),
+      };
+    },
+    [],
+  );
 
   const { showToast, updateToast } = useToast();
   const cancelToastIdRef = useRef<string | null>(null);
@@ -87,10 +132,53 @@ export default function ImageEditor({
     };
   }, []);
 
+  // Desktop keyboard shortcut: Spacebar to toggle pan mode temporarily
   useEffect(() => {
-    setResultUrl(null);
-    setProcessingError("");
-  }, [mode]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat && (e.target as HTMLElement)?.tagName !== "INPUT") {
+        e.preventDefault();
+        isSpacePressedRef.current = true;
+        setIsSpacePressed(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        isSpacePressedRef.current = false;
+        setIsSpacePressed(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  // Desktop wheel handler: Ctrl+Scroll to zoom. Standard scroll scrolls the page naturally.
+  useEffect(() => {
+    const viewport = canvasViewportRef.current;
+    if (!viewport) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        // Pinch on trackpad or Ctrl+Wheel: Zoom
+        e.preventDefault();
+        const zoomDelta = e.deltaY < 0 ? 0.2 : -0.2;
+        setZoom((prev) => {
+          const next = Math.max(1, Math.min(4, Math.round((prev + zoomDelta) * 10) / 10));
+          setPan((prevPan) => clampPan(prevPan, next));
+          return next;
+        });
+      }
+      // If neither Ctrl nor Meta is pressed, do NOT preventDefault(); let page scroll naturally
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+    };
+  }, [clampPan]);
 
   useEffect(() => {
     return () => {
@@ -231,6 +319,7 @@ export default function ImageEditor({
         setStrokeCount(0);
         setImageError("");
         setIsLoading(false);
+        resetView();
       } catch (error) {
         console.error("Image canvas initialization failed:", error);
 
@@ -259,7 +348,7 @@ export default function ImageEditor({
       image.onload = null;
       image.onerror = null;
     };
-  }, [imageUrl]);
+  }, [imageUrl, resetView]);
 
   const getPoint = (
     event: React.PointerEvent<HTMLCanvasElement>,
@@ -272,26 +361,80 @@ export default function ImageEditor({
 
     if (!rect.width || !rect.height) return null;
 
-    return {
-      x: Math.max(
-        0,
-        Math.min(
-          canvas.width,
-          ((event.clientX - rect.left) / rect.width) * canvas.width,
-        ),
-      ),
-      y: Math.max(
-        0,
-        Math.min(
-          canvas.height,
-          ((event.clientY - rect.top) / rect.height) * canvas.height,
-        ),
-      ),
-    };
+    const rawX = ((event.clientX - rect.left) / rect.width) * canvas.width;
+    const rawY = ((event.clientY - rect.top) / rect.height) * canvas.height;
+
+    // Clamp coordinates to canvas bounds
+    let x = Math.max(0, Math.min(canvas.width, rawX));
+    let y = Math.max(0, Math.min(canvas.height, rawY));
+
+    // Edge-snapping: if brush point is within <= 6px from any canvas edge,
+    // snap directly to 0 or width/height to eliminate 1-3px boundary gaps.
+    const SNAP_MARGIN = 6;
+    if (x <= SNAP_MARGIN) {
+      x = 0;
+    } else if (x >= canvas.width - SNAP_MARGIN) {
+      x = canvas.width;
+    }
+
+    if (y <= SNAP_MARGIN) {
+      y = 0;
+    } else if (y >= canvas.height - SNAP_MARGIN) {
+      y = canvas.height;
+    }
+
+    return { x, y };
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isLoading || imageError || drawingRef.current || isProcessing) return;
+    if (isLoading || imageError || isProcessing) return;
+
+    activePointersRef.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    // Check if 2 fingers are touching (Pinch-to-zoom / 2-finger pan gesture)
+    if (activePointersRef.current.size === 2) {
+      // Abort any ongoing drawing stroke cleanly
+      if (drawingRef.current) {
+        drawingRef.current = false;
+        currentStrokeRef.current = null;
+      }
+      const pts = Array.from(activePointersRef.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      initialPinchDistRef.current = dist;
+      initialPinchZoomRef.current = zoom;
+      panStartRef.current = {
+        x: (pts[0].x + pts[1].x) / 2,
+        y: (pts[0].y + pts[1].y) / 2,
+        panX: pan.x,
+        panY: pan.y,
+      };
+      event.preventDefault();
+      return;
+    }
+
+    // Check if in Move mode or Spacebar is held down
+    if (toolMode === "move" || isSpacePressedRef.current || event.button === 1) {
+      event.preventDefault();
+      if (zoom > 1) {
+        isPanningRef.current = true;
+        panStartRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+          panX: pan.x,
+          panY: pan.y,
+        };
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {}
+      }
+      return;
+    }
+
+    // Normal Brush Mode (single finger / primary click)
+    if (event.button !== 0 || drawingRef.current) return;
 
     event.preventDefault();
 
@@ -309,13 +452,73 @@ export default function ImageEditor({
     strokesRef.current = [...strokesRef.current, stroke];
 
     setStrokeCount(strokesRef.current.length);
-    setIsDrawing(true);
 
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // In case pointer capture is unsupported or already set
+    }
     redrawOverlay(strokesRef.current);
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activePointersRef.current.has(event.pointerId)) {
+      activePointersRef.current.set(event.pointerId, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+    }
+
+    // 1. Two-finger pinch-to-zoom & pan
+    if (activePointersRef.current.size >= 2) {
+      event.preventDefault();
+      const pts = Array.from(activePointersRef.current.values());
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+
+      if (initialPinchDistRef.current && initialPinchDistRef.current > 0) {
+        const factor = currentDist / initialPinchDistRef.current;
+        const newZoom = Math.max(
+          1,
+          Math.min(4, Math.round(initialPinchZoomRef.current * factor * 100) / 100),
+        );
+        setZoom(newZoom);
+
+        // Pan with the midpoint
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        const dx = midX - panStartRef.current.x;
+        const dy = midY - panStartRef.current.y;
+        setPan(
+          clampPan(
+            {
+              x: panStartRef.current.panX + dx,
+              y: panStartRef.current.panY + dy,
+            },
+            newZoom,
+          ),
+        );
+      }
+      return;
+    }
+
+    // 2. Single-pointer Pan in Move mode
+    if (isPanningRef.current) {
+      event.preventDefault();
+      const dx = event.clientX - panStartRef.current.x;
+      const dy = event.clientY - panStartRef.current.y;
+      setPan(
+        clampPan(
+          {
+            x: panStartRef.current.panX + dx,
+            y: panStartRef.current.panY + dy,
+          },
+          zoom,
+        ),
+      );
+      return;
+    }
+
+    // 3. Normal Brush Drawing
     if (!drawingRef.current || !currentStrokeRef.current) {
       return;
     }
@@ -330,13 +533,32 @@ export default function ImageEditor({
     redrawOverlay(strokesRef.current);
   };
 
-  const finishDrawing = () => {
+  const finishDrawing = (event?: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event?.pointerId !== undefined) {
+      activePointersRef.current.delete(event.pointerId);
+      if (event.currentTarget) {
+        try {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        } catch {
+          // Safe fallback
+        }
+      }
+    }
+
+    if (activePointersRef.current.size < 2) {
+      initialPinchDistRef.current = null;
+    }
+
+    if (isPanningRef.current) {
+      isPanningRef.current = false;
+    }
+
     if (!drawingRef.current) return;
 
     drawingRef.current = false;
     currentStrokeRef.current = null;
-
-    setIsDrawing(false);
   };
 
   const undo = () => {
@@ -354,7 +576,6 @@ export default function ImageEditor({
     strokesRef.current = [];
 
     setStrokeCount(0);
-    setIsDrawing(false);
     redrawOverlay([]);
   };
 
@@ -500,6 +721,7 @@ export default function ImageEditor({
       setResultExt(ext);
       setResultUrl(outputDataUrl);
       setComparisonPosition(50);
+      resetView();
       showToast("success", "Object removed successfully.");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -549,22 +771,152 @@ export default function ImageEditor({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="font-semibold text-white">Selection Editor</h3>
+      {(onReplaceImage || onRemoveImage) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-white">Object Remover</h2>
+            <p className="mt-1 truncate text-xs text-gray-400">
+              {fileName}
+            </p>
+          </div>
 
-          <p className="mt-1 text-xs text-gray-400">
-            Paint over the area you want to edit.
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {onReplaceImage && (
+              <button
+                type="button"
+                onClick={onReplaceImage}
+                disabled={isProcessing || isReplacingDisabled}
+                className="rounded-lg border border-white/15 px-3 py-2 text-sm text-gray-300 transition hover:border-white/30 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Replace Image
+              </button>
+            )}
+
+            {onRemoveImage && (
+              <button
+                type="button"
+                onClick={onRemoveImage}
+                disabled={isProcessing}
+                className="rounded-lg border border-white/15 px-3 py-2 text-sm text-gray-300 transition hover:border-white/30 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Remove image and start over
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-white">Selection Editor</h3>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Paint over the area you want to edit.
+            </p>
+          </div>
+
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-red-500/10 px-3 py-1.5 text-xs text-red-300 sm:hidden">
+            {strokeCount} stroke{strokeCount !== 1 ? "s" : ""}
+          </span>
         </div>
 
-        <span className="rounded-full bg-red-500/10 px-3 py-1.5 text-xs text-red-300">
-          {strokeCount} stroke{strokeCount !== 1 ? "s" : ""}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Zoom & Mode Toolbar */}
+          <div className="flex items-center rounded-lg border border-white/10 bg-[#161822] p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setToolMode("brush")}
+              disabled={isProcessing}
+              title="Brush Mode (Draw mask)"
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium transition ${
+                toolMode === "brush"
+                  ? "bg-violet-500 text-white"
+                  : "text-gray-400 hover:text-white"
+              } disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              <span>🖌️</span>
+              <span>Brush</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setToolMode("move")}
+              disabled={isProcessing}
+              title="Move Mode (Pan image)"
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium transition ${
+                toolMode === "move"
+                  ? "bg-violet-500 text-white"
+                  : "text-gray-400 hover:text-white"
+              } disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              <span>✋</span>
+              <span>Move</span>
+            </button>
+          </div>
+
+          <div className="flex items-center rounded-lg border border-white/10 bg-[#161822] p-1 text-xs">
+            <button
+              type="button"
+              onClick={() =>
+                setZoom((prev) => {
+                  const next = Math.max(1, Math.round((prev - 0.25) * 100) / 100);
+                  setPan((prevPan) => clampPan(prevPan, next));
+                  return next;
+                })
+              }
+              disabled={zoom <= 1 || isProcessing}
+              title="Zoom out"
+              className="rounded-md px-2 py-1 font-bold text-gray-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              −
+            </button>
+            <span className="min-w-12 text-center font-mono tabular-nums text-gray-300">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setZoom((prev) => {
+                  const next = Math.min(4, Math.round((prev + 0.25) * 100) / 100);
+                  setPan((prevPan) => clampPan(prevPan, next));
+                  return next;
+                })
+              }
+              disabled={zoom >= 4 || isProcessing}
+              title="Zoom in"
+              className="rounded-md px-2 py-1 font-bold text-gray-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              +
+            </button>
+            {(zoom > 1 || pan.x !== 0 || pan.y !== 0) && (
+              <button
+                type="button"
+                onClick={resetView}
+                disabled={isProcessing}
+                title="Reset zoom & position"
+                className="ml-1 rounded-md border border-white/10 px-2 py-1 text-[11px] text-gray-400 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-red-500/10 px-3 py-1.5 text-xs text-red-300 sm:inline-flex">
+            {strokeCount} stroke{strokeCount !== 1 ? "s" : ""}
+          </span>
+        </div>
       </div>
 
-      <div className="flex min-h-[300px] items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-3 sm:p-5">
-        <div className="relative inline-block max-w-full align-middle">
+      <div
+        ref={canvasViewportRef}
+        className="relative flex min-h-[300px] items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-3 sm:p-5 touch-none select-none"
+      >
+        <div
+          className="relative inline-block max-w-full align-middle transition-transform duration-75 will-change-transform"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: "center center",
+          }}
+        >
           <canvas
             ref={imageCanvasRef}
             className={`block h-auto max-h-[560px] max-w-full select-none object-contain ${
@@ -578,7 +930,13 @@ export default function ImageEditor({
             aria-label="Brush selection canvas"
             className={`absolute inset-0 h-full w-full select-none ${
               imageSize.width === 0 ? "invisible" : ""
-            } ${isProcessing ? "pointer-events-none" : "cursor-crosshair touch-none"}`}
+            } ${
+              isProcessing
+                ? "pointer-events-none"
+                : toolMode === "move" || isSpacePressed
+                  ? "cursor-grab active:cursor-grabbing touch-none"
+                  : "cursor-crosshair touch-none"
+            }`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={finishDrawing}
@@ -842,11 +1200,13 @@ export default function ImageEditor({
                     aspectRatio: `${imageSize.width || 4} / ${imageSize.height || 3}`,
                   }}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={resultUrl}
                     alt="After: object removal result"
                     className="absolute inset-0 h-full w-full object-contain"
                   />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={imageUrl}
                     alt="Before: original image"
@@ -890,6 +1250,7 @@ export default function ImageEditor({
                     Original Image
                   </p>
                   <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={imageUrl}
                       alt="Original image before object removal"
@@ -902,6 +1263,7 @@ export default function ImageEditor({
                     Processed Result
                   </p>
                   <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={resultUrl}
                       alt="Result after object removal"

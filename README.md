@@ -23,6 +23,7 @@
 - **In-Browser Deep Learning (LaMa ONNX)**: Eliminates the need for expensive Python servers or cloud GPU clusters by executing the Large Mask Inpainting (LaMa) model directly in the browser via `onnxruntime-web`.
 - **Persistent Local AI Caching**: Models are streamed once (~198 MB) and cached in the browser's native `Cache API`, enabling instantaneous offline-ready processing on subsequent uses with clear cache-status indicators.
 - **High-Resolution Smart ROI Compositing**: Eliminates blurry upscaling by automatically isolating stroke clusters, running localized 512×512 inpainting on square ROIs, and blending seamless feathered patches back onto the full original HD canvas.
+- **Adaptive Tool Navigation**: Clean horizontal tab navigation on desktop with an intuitive, touch-friendly custom dropdown selector on mobile devices.
 - **Non-Intrusive Toast Feedback**: Lightweight, zero-dependency toast notification system (`fixed bottom-4 right-4`) delivering instant status updates across all processing, cancellation, and download events.
 - **Consistent Output Naming**: All processed exports are uniformly saved with the `{originalName}-{featureName}-result.{ext}` pattern.
 
@@ -34,7 +35,8 @@
 
 Remove unwanted objects, watermarks, text, or photo-bombers with an intelligent brush masking interface running entirely in-browser.
 
-- **Interactive Selection Brush**: Adjustable brush size slider (5 px – 150 px), stroke counter, multi-step undo, clear canvas, and binary mask PNG export.
+- **Interactive Selection Brush & Viewport Controls**: Adjustable brush size slider (5 px – 150 px), stroke counter, multi-step undo, clear canvas, binary mask PNG export, and edge-snapping coordinates for seamless border inpainting.
+- **Internal Canvas Zoom & Pan**: Precision zoom controls (100% to 400%), two-finger pinch-to-zoom on touchscreens, Move/Pan tool mode, and strict viewport clamping to navigate intricate image details without page scroll interference.
 - **Dedicated Background Web Worker**: Runs WASM inference in an isolated thread (`ort.env.wasm.proxy = true`) preventing UI freezes or browser "Page Unresponsive" warnings.
 - **Multi-Region & Cluster Detection**: Employs downsampled 128×128 connected-component clustering (BFS). Distinct, distant markings (such as logos in opposite corners) are automatically isolated and sequentially inpainted without downsampling the whole image.
 - **Smart ROI & Feathered Compositing**: Restricts inpainting to square padded patches around each mask cluster, applying a 2px feathered alpha mask so surrounding HD pixels remain 100% untouched.
@@ -161,11 +163,11 @@ image-toolkit/
 │   │   └── Toast.tsx            # Zero-dependency toast notification viewport & hook
 │   ├── lib/
 │   │   └── lamaInpaint.ts       # ONNX Runtime Web engine, streaming Cache API & ROI compositor
-│   ├── favicon.ico
 │   ├── globals.css              # Global styles, shimmer & scanline keyframes
+│   ├── icon.svg                 # Scalable high-res vector favicon
 │   ├── layout.tsx               # Root layout and metadata
 │   └── page.tsx                 # Studio navigation & tool state
-├── public/                      # Static assets and icons
+├── public/                      # Static assets, branding logo & icons
 ├── .env.example                 # Optional environment configuration
 ├── .gitignore                   # Git ignore rules for Next.js & node_modules
 ├── eslint.config.mjs            # ESLint configuration

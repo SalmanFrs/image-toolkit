@@ -121,10 +121,6 @@ export default function ImageCompressor() {
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultExt, setResultExt] = useState("webp");
-  const [resultDimensions, setResultDimensions] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
   const [comparisonPosition, setComparisonPosition] = useState(50);
 
   // Separate cleanup for originalUrl
@@ -184,7 +180,6 @@ export default function ImageCompressor() {
       setOutputFormatChoice(detectedFormat);
       setResultBlob(null);
       setResultUrl(null);
-      setResultDimensions(null);
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -201,7 +196,6 @@ export default function ImageCompressor() {
     setOriginalDimensions(null);
     setResultBlob(null);
     setResultUrl(null);
-    setResultDimensions(null);
     setMode("quality");
     setQuality(80);
     setTargetSizeInput("500");
@@ -257,7 +251,6 @@ export default function ImageCompressor() {
       const { mimeType, ext } = getOutputFormat(outputFormatChoice);
 
       let finalBlob: Blob;
-      let finalCanvas: HTMLCanvasElement = canvas;
 
       if (mode === "quality") {
         // Direct compression with chosen quality factor
@@ -305,7 +298,6 @@ export default function ImageCompressor() {
             }
           }
 
-          finalCanvas = currentCanvas;
           finalBlob = testBlob;
         } else {
           // Lossy formats: JPEG & WebP
@@ -362,7 +354,6 @@ export default function ImageCompressor() {
             bestBlob = currentBlob;
           }
 
-          finalCanvas = currentCanvas;
           finalBlob = bestBlob;
         }
       }
@@ -373,7 +364,6 @@ export default function ImageCompressor() {
       setResultBlob(finalBlob);
       setResultUrl(newResultUrl);
       setResultExt(ext);
-      setResultDimensions({ width: finalCanvas.width, height: finalCanvas.height });
       setComparisonPosition(50);
       showToast("success", "Image compressed successfully.");
     } catch (err) {
@@ -525,11 +515,13 @@ export default function ImageCompressor() {
                       maxHeight: "560px",
                     }}
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={resultUrl}
                       alt="Compressed result"
                       className="absolute inset-0 h-full w-full object-contain"
                     />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={originalUrl}
                       alt="Original image"
@@ -574,7 +566,8 @@ export default function ImageCompressor() {
                 </button>
               </div>
             ) : (
-              <div className="flex min-h-[380px] items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-4">
+              <div className="flex min-h-95 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={originalUrl}
                   alt="Original preview"
@@ -587,7 +580,7 @@ export default function ImageCompressor() {
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="flex min-h-[380px] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-6 py-12 text-center transition hover:border-violet-400 hover:bg-violet-400/5"
+            className="flex min-h-95 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-6 py-12 text-center transition hover:border-violet-400 hover:bg-violet-400/5"
           >
             <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-500/10 text-3xl text-violet-300">
               ↑

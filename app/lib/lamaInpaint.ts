@@ -233,6 +233,108 @@ export type ROI = {
   h: number;
 };
 
+/**
+ * Snaps mask pixels to canvas borders if they are within edgeSnapDistance (default: 6px).
+ * Eliminates thin edge artifacts (e.g. 1-3px boundary lines) when brush strokes touch or near image edges.
+ */
+function snapMaskEdges(
+  maskCanvas: HTMLCanvasElement,
+  edgeSnapDistance: number = 6,
+): void {
+  const ctx = maskCanvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return;
+
+  const w = maskCanvas.width;
+  const h = maskCanvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  let modified = false;
+
+  const isPixelMasked = (x: number, y: number): boolean => {
+    const idx = (y * w + x) * 4;
+    return (
+      data[idx + 3] > 10 &&
+      (data[idx] > 10 || data[idx + 1] > 10 || data[idx + 2] > 10)
+    );
+  };
+
+  const setPixelMasked = (x: number, y: number) => {
+    const idx = (y * w + x) * 4;
+    data[idx] = 255;
+    data[idx + 1] = 255;
+    data[idx + 2] = 255;
+    data[idx + 3] = 255;
+    modified = true;
+  };
+
+  // 1. Top & Bottom edges: iterate x across width
+  for (let x = 0; x < w; x++) {
+    // Check top edge (y from 0 up to edgeSnapDistance - 1)
+    let topMaskedY = -1;
+    for (let y = 0; y < Math.min(edgeSnapDistance, h); y++) {
+      if (isPixelMasked(x, y)) {
+        topMaskedY = y;
+        break;
+      }
+    }
+    if (topMaskedY > 0) {
+      for (let y = 0; y < topMaskedY; y++) {
+        setPixelMasked(x, y);
+      }
+    }
+
+    // Check bottom edge (y from h - edgeSnapDistance to h - 1)
+    let bottomMaskedY = -1;
+    for (let y = h - 1; y >= Math.max(0, h - edgeSnapDistance); y--) {
+      if (isPixelMasked(x, y)) {
+        bottomMaskedY = y;
+        break;
+      }
+    }
+    if (bottomMaskedY !== -1 && bottomMaskedY < h - 1) {
+      for (let y = bottomMaskedY + 1; y < h; y++) {
+        setPixelMasked(x, y);
+      }
+    }
+  }
+
+  // 2. Left & Right edges: iterate y across height
+  for (let y = 0; y < h; y++) {
+    // Check left edge (x from 0 up to edgeSnapDistance - 1)
+    let leftMaskedX = -1;
+    for (let x = 0; x < Math.min(edgeSnapDistance, w); x++) {
+      if (isPixelMasked(x, y)) {
+        leftMaskedX = x;
+        break;
+      }
+    }
+    if (leftMaskedX > 0) {
+      for (let x = 0; x < leftMaskedX; x++) {
+        setPixelMasked(x, y);
+      }
+    }
+
+    // Check right edge (x from w - edgeSnapDistance to w - 1)
+    let rightMaskedX = -1;
+    for (let x = w - 1; x >= Math.max(0, w - edgeSnapDistance); x--) {
+      if (isPixelMasked(x, y)) {
+        rightMaskedX = x;
+        break;
+      }
+    }
+    if (rightMaskedX !== -1 && rightMaskedX < w - 1) {
+      for (let x = rightMaskedX + 1; x < w; x++) {
+        setPixelMasked(x, y);
+      }
+    }
+  }
+
+  if (modified) {
+    ctx.putImageData(imgData, 0, 0);
+  }
+}
+
 function getMaskBoundingBox(
   maskCtx: CanvasRenderingContext2D,
   width: number,
@@ -409,7 +511,7 @@ function getMaskClusters(
   });
 
   // Merge overlapping ROIs
-  let mergedList = [...clusterRois];
+  const mergedList = [...clusterRois];
   let changed = true;
   while (changed) {
     changed = false;
@@ -719,6 +821,9 @@ export async function runLamaInpaint(
 
   const origWidth = originalCanvas.width;
   const origHeight = originalCanvas.height;
+
+  // 0. Pre-process mask: snap near-edge mask pixels directly to outer borders
+  snapMaskEdges(maskCanvas, 6);
 
   const maskCtx = maskCanvas.getContext("2d");
   if (!maskCtx) throw new Error("Failed to access mask context.");

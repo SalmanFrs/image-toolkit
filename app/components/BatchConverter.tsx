@@ -88,7 +88,6 @@ export default function BatchConverter() {
   const [items, setItems] = useState<BatchItem[]>([]);
   const [targetFormat, setTargetFormat] = useState<OutputFormat>("image/webp");
   const [quality, setQuality] = useState(0.9);
-  const [error, setError] = useState("");
   const [isConverting, setIsConverting] = useState(false);
   const [isZipping, setIsZipping] = useState(false);
   const { showToast, updateToast } = useToast();
@@ -116,7 +115,6 @@ export default function BatchConverter() {
     const selectedFiles = Array.from(fileList);
     event.target.value = "";
 
-    const errors: string[] = [];
     const newItems: BatchItem[] = [];
     const remainingSlots = MAX_FILES - items.length;
 
@@ -180,7 +178,6 @@ export default function BatchConverter() {
     setItems([]);
     setTargetFormat("image/webp");
     setQuality(0.9);
-    setError("");
     if (inputRef.current) {
       inputRef.current.value = "";
     }
@@ -190,7 +187,6 @@ export default function BatchConverter() {
     if (items.length === 0 || isConverting) return;
 
     setIsConverting(true);
-    setError("");
 
     const currentItems = [...items];
     let successCount = 0;
@@ -288,7 +284,6 @@ export default function BatchConverter() {
 
     try {
       setIsZipping(true);
-      setError("");
 
       const zip = new JSZip();
       const usedNames = new Map<string, number>();
@@ -322,7 +317,6 @@ export default function BatchConverter() {
       updateToast(zipToastId, "success", "ZIP archive downloaded.");
     } catch {
       updateToast(zipToastId, "error", "Failed to create ZIP archive.");
-      setError("Failed to create ZIP archive.");
     } finally {
       setIsZipping(false);
     }
@@ -365,7 +359,7 @@ export default function BatchConverter() {
               </div>
             </div>
 
-            {/* Daftar File */}
+            {/* File List */}
             <div className="max-h-[520px] space-y-2.5 overflow-y-auto pr-1">
               {items.map((item) => (
                 <div
@@ -373,6 +367,7 @@ export default function BatchConverter() {
                   className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#090b10] p-3"
                 >
                   <div className="flex min-w-0 items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={item.previewUrl}
                       alt={item.file.name}
@@ -447,7 +442,7 @@ export default function BatchConverter() {
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="flex min-h-[380px] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-6 py-12 text-center transition hover:border-violet-400 hover:bg-violet-400/5"
+            className="flex min-h-95 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/20 px-6 py-12 text-center transition hover:border-violet-400 hover:bg-violet-400/5"
           >
             <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-500/10 text-3xl text-violet-300">
               ↑
@@ -474,7 +469,7 @@ export default function BatchConverter() {
         />
       </div>
 
-      {/* Panel Pengaturan */}
+      {/* Settings Panel */}
       <aside className="h-fit space-y-5 rounded-2xl border border-white/10 bg-[#11141c] p-5">
         <div>
           <h2 className="text-lg font-semibold">Batch Settings</h2>
@@ -514,7 +509,7 @@ export default function BatchConverter() {
           </div>
         </div>
 
-        {/* Quality Slider (khusus JPG & WEBP) */}
+        {/* Quality Slider (JPG & WEBP only) */}
         {targetFormat !== "image/png" && (
           <div>
             <div className="flex items-center justify-between text-sm text-gray-300">
