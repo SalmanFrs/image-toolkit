@@ -586,9 +586,9 @@ async function runInferenceOnCanvas(
     return imgCanvas512;
   }
 
-  // Apply 2-3px dilation to binary mask so edges are completely inpainted
+  // Apply 4px dilation to binary mask so outer edges/glow are completely inpainted
   const dilatedMaskFloat = new Float32Array(totalPixels);
-  const dilationRadius = 2;
+  const dilationRadius = 4;
 
   for (let y = 0; y < MODEL_INPUT_SIZE; y++) {
     for (let x = 0; x < MODEL_INPUT_SIZE; x++) {
@@ -604,6 +604,15 @@ async function runInferenceOnCanvas(
           }
         }
       }
+    }
+  }
+
+  // Zero-out imageFloat pixels within the dilated mask area so LaMa cannot "peek" at original colors
+  for (let i = 0; i < totalPixels; i++) {
+    if (dilatedMaskFloat[i] === 1.0) {
+      imageFloat[i] = 0.0;
+      imageFloat[totalPixels + i] = 0.0;
+      imageFloat[2 * totalPixels + i] = 0.0;
     }
   }
 
@@ -742,8 +751,8 @@ async function inpaintClusterRoi(
   if (!patchAlphaCtx) throw new Error("Failed to create patch alpha mask context.");
 
   const rawRoiMaskData = roiMaskCtx.getImageData(0, 0, rw, rh);
-  const alphaMaskImageData = patchAlphaCtx.createImageData(rw, rh);
   const totalRoiPixels = rw * rh;
+  const rawRoiBinary = new Uint8Array(totalRoiPixels);
 
   for (let i = 0; i < totalRoiPixels; i++) {
     const idx = i * 4;
@@ -752,17 +761,31 @@ async function inpaintClusterRoi(
       (rawRoiMaskData.data[idx] > 10 ||
         rawRoiMaskData.data[idx + 1] > 10 ||
         rawRoiMaskData.data[idx + 2] > 10);
+    rawRoiBinary[i] = isMasked ? 1 : 0;
+  }
 
-    if (isMasked) {
-      alphaMaskImageData.data[idx] = 255;
-      alphaMaskImageData.data[idx + 1] = 255;
-      alphaMaskImageData.data[idx + 2] = 255;
-      alphaMaskImageData.data[idx + 3] = 255;
-    } else {
-      alphaMaskImageData.data[idx] = 0;
-      alphaMaskImageData.data[idx + 1] = 0;
-      alphaMaskImageData.data[idx + 2] = 0;
-      alphaMaskImageData.data[idx + 3] = 0;
+  // Dilate the composite mask slightly to cover outer glow/anti-aliasing (matching model dilation)
+  const compositeDilationRadius = Math.max(2, Math.round((MODEL_INPUT_SIZE > 0 ? (rw / MODEL_INPUT_SIZE) : 1) * 3));
+  const alphaMaskImageData = patchAlphaCtx.createImageData(rw, rh);
+
+  for (let y = 0; y < rh; y++) {
+    for (let x = 0; x < rw; x++) {
+      const idx = y * rw + x;
+      if (rawRoiBinary[idx] === 1) {
+        for (let dy = -compositeDilationRadius; dy <= compositeDilationRadius; dy++) {
+          const ny = y + dy;
+          if (ny < 0 || ny >= rh) continue;
+          for (let dx = -compositeDilationRadius; dx <= compositeDilationRadius; dx++) {
+            const nx = x + dx;
+            if (nx < 0 || nx >= rw) continue;
+            const targetIdx = (ny * rw + nx) * 4;
+            alphaMaskImageData.data[targetIdx] = 255;
+            alphaMaskImageData.data[targetIdx + 1] = 255;
+            alphaMaskImageData.data[targetIdx + 2] = 255;
+            alphaMaskImageData.data[targetIdx + 3] = 255;
+          }
+        }
+      }
     }
   }
   patchAlphaCtx.putImageData(alphaMaskImageData, 0, 0);

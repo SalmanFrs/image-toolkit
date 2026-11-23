@@ -41,9 +41,10 @@ Remove unwanted objects, watermarks, text, or photo-bombers with an intelligent 
 - **Multi-Region & Cluster Detection**: Employs downsampled 128×128 connected-component clustering (BFS). Distinct, distant markings (such as logos in opposite corners) are automatically isolated and sequentially inpainted without downsampling the whole image.
 - **Smart ROI & Feathered Compositing**: Restricts inpainting to square padded patches around each mask cluster, applying a 2px feathered alpha mask so surrounding HD pixels remain 100% untouched.
 - **Real-Time UX Telemetry & Cancel Support**: Features real-time download progress with MB counter and completion percentage, a phase-based stepper (Download -> Load AI -> Prepare -> Infer -> Compose), a pulsing scanline overlay, and instant user cancellation support powered by `AbortController`.
-- **Interactive Visual Comparison**:
+- **Interactive Visual Comparison & Multi-Pass Workflow**:
   - **Split-Screen Slider**: Smooth horizontal before/after draggable divider to inspect boundaries.
   - **Before / After Mode**: Synchronized viewports for direct before/after comparison on desktop and mobile.
+  - **Continue Editing**: Seamlessly load inpainting results directly back into the editor canvas for successive brush passes without re-uploading.
 - **Standardized Export**: Saves directly as `{fileName}-object-remover-result.{ext}` matching the original input format (PNG, JPG, or WebP).
 
 ### 2. 📐 Smart Image Resizer

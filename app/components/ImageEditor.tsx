@@ -47,6 +47,8 @@ export default function ImageEditor({
   onRemoveImage,
   isReplacingDisabled,
 }: ImageEditorProps) {
+  const [editedImageUrl, setEditedImageUrl] = useState<string | null>(null);
+  const activeImageUrl = editedImageUrl ?? imageUrl;
   const imageCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -333,7 +335,7 @@ export default function ImageEditor({
     image.onerror = () => {
       if (cancelled) return;
 
-      console.error("Image loading failed:", imageUrl);
+      console.error("Image loading failed:", activeImageUrl);
 
       setImageError(
         "The browser could not load this image. Try uploading it again or using a PNG/JPG/WEBP file.",
@@ -341,14 +343,14 @@ export default function ImageEditor({
       setIsLoading(false);
     };
 
-    image.src = imageUrl;
+    image.src = activeImageUrl;
 
     return () => {
       cancelled = true;
       image.onload = null;
       image.onerror = null;
     };
-  }, [imageUrl, resetView]);
+  }, [activeImageUrl, resetView]);
 
   const getPoint = (
     event: React.PointerEvent<HTMLCanvasElement>,
@@ -656,13 +658,13 @@ export default function ImageEditor({
     abortControllerRef.current = controller;
 
     try {
-      // Create full-resolution canvas for the original image
+      // Create full-resolution canvas for the active image
       const originalImg = new Image();
       await new Promise<void>((resolve, reject) => {
         originalImg.onload = () => resolve();
         originalImg.onerror = () =>
           reject(new Error("Failed to load original image data."));
-        originalImg.src = imageUrl;
+        originalImg.src = activeImageUrl;
       });
 
       if (controller.signal.aborted) {
@@ -762,6 +764,21 @@ export default function ImageEditor({
       cancelToastIdRef.current = toastId;
       abortControllerRef.current.abort();
     }
+  };
+
+  const handleContinueEditing = () => {
+    if (!resultUrl || isProcessing) return;
+
+    setEditedImageUrl(resultUrl);
+    setResultUrl(null);
+    strokesRef.current = [];
+    currentStrokeRef.current = null;
+    drawingRef.current = false;
+    setStrokeCount(0);
+    setToolMode("brush");
+    setComparisonPosition(50);
+    resetView();
+    showToast("success", "Result loaded into editor for further editing.");
   };
 
   // ── Helper: determine completed step index ──────────────────────
@@ -1208,7 +1225,7 @@ export default function ImageEditor({
                   />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={imageUrl}
+                    src={activeImageUrl}
                     alt="Before: original image"
                     className="absolute inset-0 h-full w-full object-contain"
                     style={{
@@ -1252,7 +1269,7 @@ export default function ImageEditor({
                   <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={imageUrl}
+                      src={activeImageUrl}
                       alt="Original image before object removal"
                       className="max-h-[560px] max-w-full object-contain"
                     />
@@ -1274,28 +1291,41 @@ export default function ImageEditor({
               </div>
             )}
 
-            <a
-              href={isProcessing ? undefined : resultUrl}
-              download={
-                isProcessing
-                  ? undefined
-                  : `${fileName.replace(/\.[^/.]+$/, "") || "image"}-object-remover-result.${resultExt}`
-              }
-              aria-disabled={isProcessing}
-              onClick={() => {
-                if (!isProcessing) {
-                  const outName = `${fileName.replace(/\.[^/.]+$/, "") || "image"}-object-remover-result.${resultExt}`;
-                  showToast("success", `Download started: ${outName}`);
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={handleContinueEditing}
+                disabled={isProcessing}
+                className="flex items-center justify-center gap-2 rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-3 text-center text-sm font-semibold text-violet-300 transition hover:border-violet-400/50 hover:bg-violet-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-1"
+              >
+                <span>🖌️</span>
+                <span>Continue Editing</span>
+              </button>
+
+              <a
+                href={isProcessing ? undefined : resultUrl}
+                download={
+                  isProcessing
+                    ? undefined
+                    : `${fileName.replace(/\.[^/.]+$/, "") || "image"}-object-remover-result.${resultExt}`
                 }
-              }}
-              className={`block rounded-xl bg-violet-600 px-4 py-3 text-center text-sm font-semibold text-white transition shadow-md ${
-                isProcessing
-                  ? "cursor-not-allowed opacity-50 pointer-events-none"
-                  : "hover:bg-violet-500 hover:shadow-violet-500/20"
-              }`}
-            >
-              Download Result {resultExt.toUpperCase()}
-            </a>
+                aria-disabled={isProcessing}
+                onClick={() => {
+                  if (!isProcessing) {
+                    const outName = `${fileName.replace(/\.[^/.]+$/, "") || "image"}-object-remover-result.${resultExt}`;
+                    showToast("success", `Download started: ${outName}`);
+                  }
+                }}
+                className={`flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-center text-sm font-semibold text-white transition shadow-md sm:flex-1 ${
+                  isProcessing
+                    ? "cursor-not-allowed opacity-50 pointer-events-none"
+                    : "hover:bg-violet-500 hover:shadow-violet-500/20"
+                }`}
+              >
+                <span>↓</span>
+                <span>Download Result {resultExt.toUpperCase()}</span>
+              </a>
+            </div>
           </div>
         )}
       </div>
