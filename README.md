@@ -17,15 +17,14 @@
 
 ## 🌟 Overview
 
-**Image Toolkit** is a pure, zero-backend edge application for everyday image editing, format conversion, and state-of-the-art AI object removal. 
+**Image Toolkit** is a pure, zero-backend edge web application designed for fast, high-quality image editing, batch conversion, and in-browser deep learning.
 
-- **100% Client-Side Privacy**: All processing occurs locally within the user's browser via HTML5 Canvas, WebAssembly (WASM), and browser APIs. No photos or media files are ever uploaded to any external server.
-- **In-Browser Deep Learning (LaMa ONNX)**: Eliminates the need for expensive Python servers or cloud GPU clusters by executing the Large Mask Inpainting (LaMa) model directly in the browser via `onnxruntime-web`.
-- **Persistent Local AI Caching**: Models are streamed once (~198 MB) and cached in the browser's native `Cache API`, enabling instantaneous offline-ready processing on subsequent uses with clear cache-status indicators.
-- **High-Resolution Smart ROI Compositing**: Eliminates blurry upscaling by automatically isolating stroke clusters, running localized 512×512 inpainting on square ROIs, and blending seamless feathered patches back onto the full original HD canvas.
-- **Adaptive Tool Navigation**: Clean horizontal tab navigation on desktop with an intuitive, touch-friendly custom dropdown selector on mobile devices.
-- **Non-Intrusive Toast Feedback**: Lightweight, zero-dependency toast notification system (`fixed bottom-4 right-4`) delivering instant status updates across all processing, cancellation, and download events.
-- **Consistent Output Naming**: All processed exports are uniformly saved with the `{originalName}-{featureName}-result.{ext}` pattern.
+- **100% Client-Side Privacy**: All processing runs locally inside the browser using HTML5 Canvas, WebAssembly (WASM), and modern web APIs. No photos or media files are ever transmitted to any external server.
+- **In-Browser Deep Learning**: Eliminates cloud GPU servers by executing neural networks directly in the browser using `onnxruntime-web` with dedicated background Web Worker isolation.
+- **Persistent Local AI Model Caching**: AI models are streamed once and stored locally in the browser's native Cache API (`image-toolkit-ai-models-v1`), enabling instant offline-ready execution on future visits with clear cache-status indicators.
+- **Background Tab Continuity**: Execution uses timeout yielding instead of animation frames, ensuring long inference runs continue uninterrupted even when users switch browser tabs.
+- **Unified UX & Telemetry**: Live progress bars with elapsed timers (`MM:SS`), interactive Before/After comparison sliders, compact model status badges, and non-intrusive toast notifications across every tool.
+- **Consistent File Naming**: Processed images export cleanly matching the `{originalName}-{featureName}-result.{ext}` pattern.
 
 ---
 
@@ -33,62 +32,69 @@
 
 ### 1. 🪄 AI Object Remover (LaMa Inpainting)
 
-Remove unwanted objects, watermarks, text, or photo-bombers with an intelligent brush masking interface running entirely in-browser.
+Remove unwanted objects, watermarks, text, or photo-bombers with an intelligent brush masking interface running entirely in your browser.
 
-- **Interactive Selection Brush & Viewport Controls**: Adjustable brush size slider (5 px – 150 px), stroke counter, multi-step undo, clear canvas, binary mask PNG export, and edge-snapping coordinates for seamless border inpainting.
-- **Internal Canvas Zoom & Pan**: Precision zoom controls (100% to 400%), two-finger pinch-to-zoom on touchscreens, Move/Pan tool mode, and strict viewport clamping to navigate intricate image details without page scroll interference.
-- **Dedicated Background Web Worker**: Runs WASM inference in an isolated thread (`ort.env.wasm.proxy = true`) preventing UI freezes or browser "Page Unresponsive" warnings.
-- **Multi-Region & Cluster Detection**: Employs downsampled 128×128 connected-component clustering (BFS). Distinct, distant markings (such as logos in opposite corners) are automatically isolated and sequentially inpainted without downsampling the whole image.
-- **Smart ROI & Feathered Compositing**: Restricts inpainting to square padded patches around each mask cluster, applying a 2px feathered alpha mask so surrounding HD pixels remain 100% untouched.
-- **Real-Time UX Telemetry & Cancel Support**: Features real-time download progress with MB counter and completion percentage, a phase-based stepper (Download -> Load AI -> Prepare -> Infer -> Compose), a pulsing scanline overlay, and instant user cancellation support powered by `AbortController`.
-- **Interactive Visual Comparison & Multi-Pass Workflow**:
-  - **Split-Screen Slider**: Smooth horizontal before/after draggable divider to inspect boundaries.
-  - **Before / After Mode**: Synchronized viewports for direct before/after comparison on desktop and mobile.
-  - **Continue Editing**: Seamlessly load inpainting results directly back into the editor canvas for successive brush passes without re-uploading.
-- **Standardized Export**: Saves directly as `{fileName}-object-remover-result.{ext}` matching the original input format (PNG, JPG, or WebP).
+- **Interactive Selection Brush & Viewport Controls**: Adjustable brush size slider (5 px to 150 px), stroke counter, multi-step undo, clear selection, binary mask PNG export, and edge-snapping coordinates for clean border inpainting.
+- **Canvas Zoom & Pan**: Precision zoom controls (100% to 400%), two-finger pinch-to-zoom on touchscreens, Move/Pan mode, and strict viewport clamping to inspect details without page scrolling interference.
+- **Zeroed-Out Masked Pixels & Auto Dilation**: Automatically zeros RGB channels of masked pixels before tensor creation to prevent color bleeding, paired with 4px dilation and feathered compositing to eliminate outer glow or residual edges.
+- **Connected-Component Clustering**: Employs 128x128 grid clustering (BFS) to isolate distant objects and process them sequentially without downsampling the whole image.
+- **One-Time Download Confirmation Modal**: Prompts users with a custom dark modal before downloading the ~198 MB LaMa model on first use, skipping immediately on subsequent runs if cached.
+- **Live Elapsed Timer & Result Duration**: Real-time progress bar with step tracker and live `MM:SS` timer, displaying a permanent completion badge (e.g. `Processed in 00:04`) on the result header.
+- **Continue Editing Workflow**: Load the inpainting result directly back into the editor canvas with a single click to perform sequential brush passes without re-uploading.
+- **Interactive Comparison Slider**: Draggable horizontal split slider to compare the original image and inpainted result seamlessly.
 
-### 2. 📐 Smart Image Resizer
+### 2. ✨ AI Image Upscaler (Super-Resolution)
 
-High-fidelity client-side image scaling designed for speed and web optimization.
+Upscale and restore low-resolution photos and illustrations up to 400% using client-side AI Super-Resolution powered by Real-ESRGAN Compact.
+
+- **2x and 4x Super-Resolution**: Upscale images cleanly to 2x or 4x their original resolution with enhanced details and clarity.
+- **Dual Enhancement Styles**:
+  - **Photo**: Preserves natural grain, skin tones, and organic textures with refined detail sharpening.
+  - **Illustration**: Produces clean, crisp outlines for digital art, anime, logos, and graphic design.
+- **Tiled Inference with Weighted Accumulation Buffer**: Slices images into 256x256 tiles with 16px overlap, accumulating into 4-channel Float32 buffers with linear boundary weights to eliminate dark grid seams and out-of-memory errors.
+- **High-Dimension Progressive Fallback**: Automatically switches to multi-step progressive canvas scaling paired with unsharp mask sharpening for images exceeding 2048px.
+- **One-Time Download Confirmation Modal**: Clean modal dialog confirming the one-time ~5 MB model download with instant subsequent loads from browser cache.
+- **Live Progress & Stats Banner**: Displays real-time tile inference percentage, live elapsed timer (`MM:SS`), pixel gain indicator (`+100%` or `+300% Pixels`), and total elapsed time badge (`Time: MM:SS`).
+- **Interactive Comparison Slider**: Full-width interactive split slider to evaluate clarity before downloading.
+
+### 3. ⚡ Client-Side Image Compressor
+
+Intelligent browser-based compression balancing aggressive file size reduction with visual quality.
+
+- **High-Capacity File Support**: Supports files up to 30 MB (PNG, JPG, or WebP) directly on your device.
+- **Dual Compression Modes**:
+  - **Quality Slider & Presets**: Granular 10% to 100% control with one-click presets: High Quality (85%), Balanced (75%), and Maximum Compression (50%).
+  - **Target File Size Search**: Automatic binary search iteration to achieve a target maximum file size in KB, with progressive dimension scaling fallback for lossless PNGs and high-resolution images.
+- **Format Auto-Detection**: Retains or converts formats across JPG, WebP, and PNG with auto-detection on upload.
+- **Optional Max Dimension Scaling**: Optional downscaling for additional byte savings (e.g. 1920px).
+- **Interactive Comparison Slider**: Split slider to inspect visual quality before downloading.
+
+### 4. 📐 Smart Image Resizer
+
+High-fidelity image scaling designed for speed, flexibility, and web optimization.
 
 - **Custom Dimensions**: Scale up to 12,000 px with instant aspect-ratio locking or freeform dimensions.
 - **Multi-Format Export**: Convert seamlessly across **PNG**, **JPG**, and **WebP** with auto-detection of the uploaded format.
-- **Quality & Compression Controls**: Granular compression quality slider for lossy formats (JPG/WebP) with clean background fills.
+- **Quality & Compression Controls**: Compression quality slider for lossy formats (JPG/WebP) with clean background fills.
 - **Real-Time Output Preview**: Inspect resulting output image dimensions, visual sharpness, and calculated byte size before downloading.
-- **Standardized Export**: Saves directly as `{fileName}-resized-result.{ext}`.
 
-### 3. ✂️ Interactive Image Cropper
+### 5. ✂️ Interactive Image Cropper
 
 Crop, reframe, and orient images with sub-pixel precision powered by `react-easy-crop`.
 
 - **8 Aspect Ratio Presets**: Choose between **Original**, **1:1 (Square)**, **4:3**, **16:9 (Widescreen)**, **3:2**, **2:3 (Portrait)**, **3:4**, and **9:16 (Stories/Reels)**, or freeform cropping.
-- **Accidental Rotation Prevention on Mobile**: Pinch gesture is strictly restricted to zoom in/out with bounded positions, while canvas rotation is deliberately controlled via 90° clockwise/counter-clockwise buttons.
-- **Bounded Canvas Clamping**: Clamps crop boundaries to prevent white background margins in export.
-- **Live Output Telemetry**: Live display of cropped pixel width/height and crop coordinate telemetry.
-- **Preview & Format Export**: Dedicated full-resolution preview with output format selection (PNG/JPG/WebP).
-- **Standardized Export**: Saves directly as `{fileName}-cropped-result.{ext}`.
+- **Accidental Rotation Prevention**: Pinch gestures on mobile are strictly locked to zoom in/out, while canvas rotation is controlled via dedicated 90-degree clockwise and counter-clockwise buttons.
+- **Bounded Canvas Clamping**: Clamps crop boundaries to prevent white background borders in export.
+- **Live Dimension Telemetry**: Live display of cropped pixel width/height and crop coordinate telemetry.
 
-### 4. 📦 Batch Format Converter
+### 6. 📦 Batch Format Converter
 
-Convert and compress image collections in parallel entirely within the user's browser.
+Convert and compress image collections in parallel entirely within your browser.
 
 - **Multi-File Queue**: Drag and drop up to 20 images simultaneously (max 15 MB per file).
-- **Client-Side Bulk Conversion**: Rapid parallel rasterization to PNG, JPG, or WebP with global compression quality tuning.
+- **Parallel Bulk Conversion**: Fast parallel rasterization to PNG, JPG, or WebP with global compression quality tuning.
 - **Storage Metrics**: Direct comparison showing original vs. converted byte sizes and percentage saved.
-- **Flexible Downloads**: Download individual converted files as `{fileName}-converted-result.{ext}` or package the entire batch into a single archive (`image-toolkit-converted.zip`) on the fly using `JSZip`.
-
-### 5. ⚡ Client-Side Image Compressor
-
-Intelligent browser-based compression balancing file size reduction with visual clarity.
-
-- **High-Capacity File Support**: Accommodates files up to 30 MB (PNG, JPG, or WebP) directly in the client.
-- **Dual Compression Modes**:
-  - **Quality Slider & Quick Presets**: Precise 10% - 100% tuning with one-click presets: High Quality (85%), Balanced (75%), and Maximum Compression (50%).
-  - **Target File Size Search with Progressive Fallback**: Automatic binary search iteration to achieve a target maximum file size in KB, with progressive dimension scaling fallback for lossless PNGs and ultra-high-resolution images (5000px+).
-- **Smart Format Auto-Detection**: Converts or retains formats across JPG, WebP, and PNG with auto-detection on upload.
-- **Optional Max Dimension Scaling**: Optional downscaling for additional byte savings (e.g. 1920px).
-- **Live Visual Comparison Slider**: Interactive before/after split slider allowing users to inspect sharpness before saving.
-- **Standardized Export**: Saves directly as `{fileName}-compressed-result.{ext}`.
+- **Flexible Downloads**: Download individual converted files or package the entire batch into a single archive (`image-toolkit-converted.zip`) on the fly using `JSZip`.
 
 ---
 
@@ -100,23 +106,31 @@ flowchart TD
 
     subgraph ClientStudio["Image Toolkit Studio (100% Client-Side)"]
         UI["Next.js App Router + React 19 UI"]
-        Resizer["Image Resizer (HTML5 Canvas 2D)"]
+        Resizer["Image Resizer (Canvas 2D)"]
         Cropper["Image Cropper (react-easy-crop)"]
-        Compressor["Image Compressor (HTML5 Canvas 2D)"]
+        Compressor["Image Compressor (Canvas 2D)"]
         Batch["Batch Converter (createImageBitmap + JSZip)"]
         Toast["Toast Notification System"]
         
-        subgraph EdgeAI["Edge AI Inpainting Engine"]
+        subgraph EdgeAI["In-Browser Edge AI Engines"]
             Cache["Browser Cache API (image-toolkit-ai-models-v1)"]
             Worker["Background Web Worker (ort.env.wasm.proxy)"]
-            LaMa["LaMa ONNX Model (Float32 / 512x512)"]
-            ROI["Smart ROI Clustering & Feathered Compositor"]
+            
+            subgraph LaMaEngine["AI Object Remover"]
+                LaMaModel["LaMa ONNX Model (Float32 / 512x512)"]
+                ROI["Smart ROI Clustering & Feathered Compositor"]
+            end
+            
+            subgraph UpscalerEngine["AI Image Upscaler"]
+                UpscalerModel["Real-ESRGAN Compact ONNX (~5 MB)"]
+                Tiling["256x256 Tiling + Weighted Accumulation Buffer"]
+            end
         end
     end
 
     RemoteCDN["HuggingFace CDN / Public Storage"]
 
-    User -->|"Paint Mask / Resize / Crop / Compress / Convert"| UI
+    User -->|"Paint Mask / Upscale / Resize / Crop / Compress / Convert"| UI
     UI -->|"Canvas Scaling & Export"| Resizer
     UI -->|"Cropping & Orientation"| Cropper
     UI -->|"Quality Tuning & Search"| Compressor
@@ -125,12 +139,20 @@ flowchart TD
     
     UI -->|"Execute Inpaint"| ROI
     ROI -->|"Check / Load Model"| Cache
-    Cache -.->|"First-time Download Stream"| RemoteCDN
     ROI -->|"Offload 512x512 Tensors"| Worker
-    Worker -->|"Execute WASM Inference"| LaMa
-    LaMa -->|"Inpainted Patch"| ROI
+    Worker -->|"Execute WASM Inference"| LaMaModel
+    LaMaModel -->|"Inpainted Patch"| ROI
     ROI -->|"Feathered HD Composite"| UI
-    UI -->|"Direct PNG/JPG/WebP Download"| User
+
+    UI -->|"Execute Super-Resolution"| Tiling
+    Tiling -->|"Check / Load Model"| Cache
+    Tiling -->|"Offload 256x256 Tiles"| Worker
+    Worker -->|"Execute WASM Inference"| UpscalerModel
+    UpscalerModel -->|"Accumulate Float32 Channels"| Tiling
+    Tiling -->|"Seamless Blended HD Canvas"| UI
+
+    Cache -.->|"One-Time Stream Download"| RemoteCDN
+    UI -->|"Direct PNG / JPG / WebP Download"| User
 ```
 
 ---
@@ -139,14 +161,16 @@ flowchart TD
 
 | Technology | Role & Highlights |
 | :--- | :--- |
-| **Next.js 16 (App Router)** | React 19 framework providing optimized client-side hydration, fast routing, and clean component architecture. |
-| **TypeScript 5** | Strict type safety across image pipelines, bounding box geometry, and ONNX tensor interfaces. |
+| **Next.js 16 (App Router)** | Modern React 19 framework providing optimized client hydration, partial prefetching, and clean modular component structure. |
+| **TypeScript 5** | Strict type safety across image pipelines, accumulation buffers, and ONNX tensor interfaces. |
 | **Tailwind CSS v4** | Dark-themed styling, micro-animations (shimmer, scanline), and mobile-responsive layout. |
-| **ONNX Runtime Web (`onnxruntime-web`)** | WebAssembly execution provider with background worker proxy for client-side deep learning inference. |
-| **LaMa (Large Mask Inpainting)** | State-of-the-art fast Fourier convolution (FFC) architecture for resolution-independent structural inpainting. |
+| **ONNX Runtime Web (`onnxruntime-web`)** | WebAssembly execution provider running inside background Web Workers (`proxy = true`) for non-blocking AI inference. |
+| **LaMa (Large Mask Inpainting)** | Fast Fourier convolution (FFC) model running client-side for structural object and blemish removal. |
+| **Real-ESRGAN Compact** | Lightweight super-resolution model (~5 MB) delivering 2x and 4x upscaling directly in the browser. |
 | **HTML5 Canvas 2D** | Hardware-accelerated image scaling, drawing, mask dilation, and feathered compositing. |
 | **react-easy-crop** | High-performance touch and mouse cropping with customizable aspect ratios and rotation. |
 | **JSZip** | In-browser client-side archive generation for batch image downloads. |
+| **lucide-react** | Clean, lightweight UI icons for duration timers and status telemetry. |
 
 ---
 
@@ -159,16 +183,18 @@ image-toolkit/
 │   │   ├── BatchConverter.tsx   # Multi-file format converter & ZIP packager
 │   │   ├── ImageCompressor.tsx  # Browser-based image compression & target size search
 │   │   ├── ImageCropper.tsx     # Crop & rotation tool using react-easy-crop
-│   │   ├── ImageEditor.tsx      # Inpainting mask brush, progress UI & comparison views
+│   │   ├── ImageEditor.tsx      # Inpainting mask brush, progress UI & comparison slider
 │   │   ├── ImageResizer.tsx     # Image scaling & format compression
+│   │   ├── ImageUpscaler.tsx    # Client-side AI super-resolution (Real-ESRGAN Compact)
 │   │   └── Toast.tsx            # Zero-dependency toast notification viewport & hook
 │   ├── lib/
-│   │   └── lamaInpaint.ts       # ONNX Runtime Web engine, streaming Cache API & ROI compositor
+│   │   ├── imageUpscaler.ts     # Super-resolution engine, tiled inference & accumulation buffer
+│   │   └── lamaInpaint.ts       # LaMa ONNX engine, streaming Cache API & ROI compositor
 │   ├── globals.css              # Global styles, shimmer & scanline keyframes
 │   ├── icon.svg                 # Scalable high-res vector favicon
 │   ├── layout.tsx               # Root layout and metadata
-│   └── page.tsx                 # Studio navigation & tool state
-├── public/                      # Static assets, branding logo & icons
+│   └── page.tsx                 # Studio navigation, tool switcher & guides
+├── public/                      # Static assets, branding logo & vector icons
 ├── .env.example                 # Optional environment configuration
 ├── .gitignore                   # Git ignore rules for Next.js & node_modules
 ├── eslint.config.mjs            # ESLint configuration
@@ -186,7 +212,7 @@ image-toolkit/
 ### Prerequisites
 
 - **Node.js**: version 20+ (recommended 22+)
-- **npm** (comes with Node.js)
+- **npm** (comes bundled with Node.js)
 
 ### Installation & Run
 
@@ -201,8 +227,8 @@ image-toolkit/
    npm install
    ```
 
-3. *(Optional)* Configure a custom LaMa model URL:
-   Copy `.env.example` to `.env.local` if you wish to host the ONNX model on a custom CDN or self-hosted endpoint:
+3. *(Optional)* Configure custom AI model URLs:
+   Copy `.env.example` to `.env.local` if you wish to host the ONNX models on a custom CDN or self-hosted endpoint:
    ```bash
    cp .env.example .env.local
    ```

@@ -8,9 +8,10 @@ import ImageResizer from "./components/ImageResizer";
 import ImageCropper from "./components/ImageCropper";
 import BatchConverter from "./components/BatchConverter";
 import ImageCompressor from "./components/ImageCompressor";
+import ImageUpscaler from "./components/ImageUpscaler";
 import { useToast } from "./components/Toast";
 
-type ActiveTool = "remove" | "compress" | "resize" | "crop" | "convert";
+type ActiveTool = "remove" | "upscale" | "compress" | "resize" | "crop" | "convert";
 
 interface ToolOption {
   id: ActiveTool;
@@ -25,6 +26,12 @@ const TOOLS: ToolOption[] = [
     name: "Object Remover",
     sublabel: "Remove unwanted objects & watermark with AI",
     icon: "🪄",
+  },
+  {
+    id: "upscale",
+    name: "Image Upscaler",
+    sublabel: "Super-Resolution 2x / 4x enhancement with AI",
+    icon: "✨",
   },
   {
     id: "compress",
@@ -144,7 +151,7 @@ export default function Home() {
             Your images, <span className="text-violet-400">your way.</span>
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-gray-400 sm:text-base">
-            Practical tools to remove objects, compress, resize, crop, and
+            Practical tools to remove objects, upscale, compress, resize, crop, and
             batch-convert images with fast browser processing and AI where it helps most.
           </p>
         </div>
@@ -262,6 +269,11 @@ export default function Home() {
             ))}
           </div>
 
+          {/* Image Upscaler: keep mounted so its state is preserved when switching tools. */}
+          <div className={activeTool === "upscale" ? "block" : "hidden"}>
+            <ImageUpscaler />
+          </div>
+
           {/* Image Compressor: keep mounted so its state is preserved when switching tools. */}
           <div className={activeTool === "compress" ? "block" : "hidden"}>
             <ImageCompressor />
@@ -332,19 +344,19 @@ export default function Home() {
                   <li>Paint over the object you want to remove.</li>
                   <li>Click &quot;Remove Object with AI (LaMa)&quot;.</li>
                   <li>
-                    Compare the result using the slider or side-by-side view, then download.
+                    Compare the result using the interactive comparison slider, then download.
                   </li>
                 </ol>
                 <div className="mt-6 rounded-xl border border-violet-400/20 bg-violet-400/5 p-3">
                   <p className="text-sm font-medium text-violet-300">
-                    100% Client-Side Processing
+                    Pro Tip for Clean Results
                   </p>
                   <p className="mt-2 text-xs leading-5 text-gray-400">
-                    Runs entirely in your browser using ONNX Runtime Web. Zero server latency, full privacy, and instant subsequent runs via browser Cache API.
+                    Brush slightly wider than the object and its shadow or glow so the AI blends the background seamlessly. Your images are never uploaded to any server.
                   </p>
                 </div>
                 <p className="mt-4 text-xs leading-5 text-gray-500">
-                  Red areas indicate your selection mask. High-resolution compositing ensures surrounding pixels remain crisp without quality degradation.
+                  Red areas highlight your brush selection. The clean replacement blends smoothly into the surrounding photo while preserving original quality.
                 </p>
               </aside>
             </div>

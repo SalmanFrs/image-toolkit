@@ -1,9 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Clock } from "lucide-react";
 import { isModelCached, runLamaInpaint } from "../lib/lamaInpaint";
 import type { InpaintProgress } from "../lib/lamaInpaint";
 import { useToast } from "./Toast";
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
 
 type Point = {
   x: number;
@@ -73,12 +81,12 @@ export default function ImageEditor({
   const [processingError, setProcessingError] = useState("");
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultExt, setResultExt] = useState("png");
-  const [comparisonMode, setComparisonMode] = useState<
-    "slider" | "before-after"
-  >("slider");
   const [comparisonPosition, setComparisonPosition] = useState(50);
   const [isCached, setIsCached] = useState<boolean | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [completedDurationMs, setCompletedDurationMs] = useState<number | null>(null);
 
   // ── Canvas Zoom & Pan state ────────────────────────────────────────
   const [toolMode, setToolMode] = useState<"brush" | "move">("brush");
@@ -629,6 +637,23 @@ export default function ImageEditor({
     draggingComparisonRef.current = false;
   };
 
+  const handleProcessClick = () => {
+    const maskCanvas = maskCanvasRef.current;
+    const imageCanvas = imageCanvasRef.current;
+
+    if (!maskCanvas || !imageCanvas || strokeCount === 0) {
+      setProcessingError("Select the object you want to remove first.");
+      return;
+    }
+
+    if (!isCached) {
+      setShowConfirmModal(true);
+      return;
+    }
+
+    processImage();
+  };
+
   const processImage = async () => {
     const maskCanvas = maskCanvasRef.current;
     const imageCanvas = imageCanvasRef.current;
@@ -638,16 +663,16 @@ export default function ImageEditor({
       return;
     }
 
-    if (isCached === false) {
-      const confirmed = window.confirm(
-        "First-time use will download the LaMa AI model (~198 MB) once and cache it locally in your browser. Do you want to proceed?",
-      );
-      if (!confirmed) return;
-    }
-
     setIsProcessing(true);
     setIsCancelling(false);
     setProcessingError("");
+    setCompletedDurationMs(null);
+    setElapsedMs(0);
+    const startTime = Date.now();
+    const timerInterval = setInterval(() => {
+      setElapsedMs(Date.now() - startTime);
+    }, 250);
+
     setProgress({
       phase: "preparing",
       message: "Preparing image...",
@@ -719,6 +744,8 @@ export default function ImageEditor({
         controller.signal,
       );
 
+      const duration = Date.now() - startTime;
+      setCompletedDurationMs(duration);
       setIsCached(true);
       setResultExt(ext);
       setResultUrl(outputDataUrl);
@@ -750,6 +777,7 @@ export default function ImageEditor({
           : "An error occurred while processing the image.",
       );
     } finally {
+      clearInterval(timerInterval);
       abortControllerRef.current = null;
       setIsProcessing(false);
       setIsCancelling(false);
@@ -771,6 +799,7 @@ export default function ImageEditor({
 
     setEditedImageUrl(resultUrl);
     setResultUrl(null);
+    setCompletedDurationMs(null);
     strokesRef.current = [];
     currentStrokeRef.current = null;
     drawingRef.current = false;
@@ -992,17 +1021,24 @@ export default function ImageEditor({
         <div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">
-              Client-Side AI Inpainting (LaMa)
+              AI Object Removal
             </h3>
-            <span className="rounded-full bg-violet-500/20 px-2.5 py-0.5 text-[11px] font-medium text-violet-300">
-              100% In-Browser ONNX
-            </span>
+            {isCached !== null && (
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                  isCached
+                    ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                    : "bg-amber-500/10 text-amber-300 border border-amber-500/20"
+                }`}
+              >
+                {isCached ? "Model Cached" : "Model ~198 MB"}
+              </span>
+            )}
           </div>
           <p className="mt-2 text-xs leading-5 text-gray-400">
-            Powered by LaMa AI via ONNX Runtime WebAssembly running 100% locally
-            in your browser. Complete privacy with zero server uploads, the AI
-            model is downloaded once, cached in your browser via the Cache API,
-            and composited using Smart ROI preserving full HD resolution.
+            Remove unwanted objects, text, or blemishes directly in your browser.
+            Your photos stay 100% private on your device, and the AI model is
+            saved locally after the first download for instant future use.
           </p>
         </div>
 
@@ -1070,24 +1106,8 @@ export default function ImageEditor({
       </div>
 
       <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        {isCached === true && (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-400" />
-            <span>AI Model Ready (Cached locally)</span>
-          </div>
-        )}
-        {isCached === false && (
-          <div className="flex items-start gap-2 rounded-lg border border-violet-400/20 bg-violet-400/5 p-3 text-xs text-gray-300">
-            <span className="mt-0.5 text-violet-400">ℹ</span>
-            <span>
-              First-time use downloads the AI model (~198 MB) once and caches it
-              locally in your browser.
-            </span>
-          </div>
-        )}
-
         <button
-          onClick={processImage}
+          onClick={handleProcessClick}
           disabled={
             isLoading || !!imageError || isProcessing || strokeCount === 0
           }
@@ -1156,14 +1176,14 @@ export default function ImageEditor({
                 {progress.message}
               </span>
               <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                <span className="tabular-nums whitespace-nowrap text-gray-400">
+                <span className="font-mono tabular-nums whitespace-nowrap text-gray-400">
                   {progress.phase === "downloading" && progress.loadedMB != null
                     ? progress.totalMB != null
-                      ? `${progress.loadedMB} / ${progress.totalMB} MB`
-                      : `${progress.loadedMB} MB`
+                      ? `${progress.loadedMB} / ${progress.totalMB} MB · ${formatDuration(elapsedMs)}`
+                      : `${progress.loadedMB} MB · ${formatDuration(elapsedMs)}`
                     : progress.percent != null
-                      ? `${progress.percent}%`
-                      : ""}
+                      ? `${progress.percent}% · ${formatDuration(elapsedMs)}`
+                      : formatDuration(elapsedMs)}
                 </span>
                 <button
                   type="button"
@@ -1187,109 +1207,70 @@ export default function ImageEditor({
         {resultUrl && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="font-semibold text-white">
-                Before / After Comparison
-              </h3>
-              <div className="flex rounded-lg border border-white/10 p-1">
-                <button
-                  type="button"
-                  onClick={() => setComparisonMode("slider")}
-                  className={`rounded-md px-3 py-2 text-xs font-medium transition ${comparisonMode === "slider" ? "bg-violet-500 text-white" : "text-gray-300 hover:bg-white/10"}`}
-                >
-                  Slider
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setComparisonMode("before-after")}
-                  className={`rounded-md px-3 py-2 text-xs font-medium transition ${comparisonMode === "before-after" ? "bg-violet-500 text-white" : "text-gray-300 hover:bg-white/10"}`}
-                >
-                  Before / After
-                </button>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h3 className="font-semibold text-white">
+                  Before / After Comparison
+                </h3>
+                {completedDurationMs !== null && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 px-3 py-1 text-xs font-medium tabular-nums text-violet-300">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    <span>Processed in {formatDuration(completedDurationMs)}</span>
+                  </span>
+                )}
               </div>
             </div>
 
-            {comparisonMode === "slider" ? (
-              <div className="space-y-3">
-                <div
-                  ref={comparisonContainerRef}
-                  className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-xl border border-white/10 bg-[#090b10]"
+            <div className="space-y-3">
+              <div
+                ref={comparisonContainerRef}
+                className="relative mx-auto w-full max-w-4xl overflow-hidden rounded-xl border border-white/10 bg-[#090b10]"
+                style={{
+                  aspectRatio: `${imageSize.width || 4} / ${imageSize.height || 3}`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={resultUrl}
+                  alt="After: object removal result"
+                  className="absolute inset-0 h-full w-full object-contain"
+                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={activeImageUrl}
+                  alt="Before: original image"
+                  className="absolute inset-0 h-full w-full object-contain"
                   style={{
-                    aspectRatio: `${imageSize.width || 4} / ${imageSize.height || 3}`,
+                    clipPath: `inset(0 ${100 - comparisonPosition}% 0 0)`,
                   }}
+                />
+                <div
+                  className="pointer-events-none absolute bottom-0 top-0 z-10 w-0.5 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.25)]"
+                  style={{ left: `${comparisonPosition}%` }}
+                />
+                <button
+                  type="button"
+                  aria-label="Move the before and after divider"
+                  title="Move left or right"
+                  onPointerDown={handleComparisonPointerDown}
+                  onPointerMove={handleComparisonPointerMove}
+                  onPointerUp={finishComparisonDrag}
+                  onPointerCancel={finishComparisonDrag}
+                  className="absolute top-1/2 z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none cursor-ew-resize items-center justify-center rounded-full border border-white/80 bg-violet-500 text-lg font-bold text-white shadow-lg hover:bg-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  style={{ left: `${comparisonPosition}%` }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={resultUrl}
-                    alt="After: object removal result"
-                    className="absolute inset-0 h-full w-full object-contain"
-                  />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={activeImageUrl}
-                    alt="Before: original image"
-                    className="absolute inset-0 h-full w-full object-contain"
-                    style={{
-                      clipPath: `inset(0 ${100 - comparisonPosition}% 0 0)`,
-                    }}
-                  />
-                  <div
-                    className="pointer-events-none absolute bottom-0 top-0 z-10 w-0.5 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.25)]"
-                    style={{ left: `${comparisonPosition}%` }}
-                  />
-                  <button
-                    type="button"
-                    aria-label="Move the before and after divider"
-                    title="Move left or right"
-                    onPointerDown={handleComparisonPointerDown}
-                    onPointerMove={handleComparisonPointerMove}
-                    onPointerUp={finishComparisonDrag}
-                    onPointerCancel={finishComparisonDrag}
-                    className="absolute top-1/2 z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none cursor-ew-resize items-center justify-center rounded-full border border-white/80 bg-violet-500 text-lg font-bold text-white shadow-lg hover:bg-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-300"
-                    style={{ left: `${comparisonPosition}%` }}
-                  >
-                    ↔
-                  </button>
-                  <span className="absolute left-3 top-3 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
-                    Before
-                  </span>
-                  <span className="absolute right-3 top-3 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
-                    After
-                  </span>
-                </div>
-                <p className="text-xs text-gray-400">
-                  Drag the handle on the image to compare before and after.
-                </p>
+                  ↔
+                </button>
+                <span className="absolute left-3 top-3 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
+                  Before
+                </span>
+                <span className="absolute right-3 top-3 rounded-md bg-black/70 px-2 py-1 text-xs font-medium text-white">
+                  After
+                </span>
               </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-200">
-                    Original Image
-                  </p>
-                  <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={activeImageUrl}
-                      alt="Original image before object removal"
-                      className="max-h-[560px] max-w-full object-contain"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-200">
-                    Processed Result
-                  </p>
-                  <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[#090b10] p-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={resultUrl}
-                      alt="Result after object removal"
-                      className="max-h-[560px] max-w-full object-contain"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+              <p className="text-xs text-gray-400">
+                Drag the handle on the image to compare before and after.
+              </p>
+            </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <button
@@ -1329,6 +1310,47 @@ export default function ImageEditor({
           </div>
         )}
       </div>
+
+      {/* AI Model Download Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/15 bg-[#141620] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-xl">
+                ✨
+              </span>
+              <div>
+                <h3 className="text-base font-semibold text-white">
+                  Download AI Model (~198 MB)
+                </h3>
+                <p className="text-xs text-gray-400">One-time browser download</p>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-gray-300">
+              The LaMa AI inpainting model (~198 MB) needs to be downloaded once. It will be stored in your browser cache for instant future use. All processing happens 100% locally on your device without uploading your photos.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-gray-300 transition hover:bg-white/10 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  processImage();
+                }}
+                className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-500 shadow-md hover:shadow-violet-500/20"
+              >
+                Download & Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

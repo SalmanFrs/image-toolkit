@@ -821,11 +821,11 @@ export default function ImageCompressor() {
             Compressor Guide
           </p>
           <ul className="mt-2 list-disc list-inside space-y-1 text-[11px] text-gray-400">
-            <li>100% private, client-side HTML5 Canvas rasterization.</li>
+            <li>100% private, processed directly on your device.</li>
             <li>
-              WebP format produces the greatest reduction with high clarity.
+              WebP format produces the greatest size reduction with high visual clarity.
             </li>
-            <li>Target file size automatically performs binary search.</li>
+            <li>Target file size automatically finds the best quality setting.</li>
           </ul>
         </div>
       </aside>

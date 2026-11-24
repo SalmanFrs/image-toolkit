@@ -636,14 +636,8 @@ async function runInferenceOnCanvas(
     percent: 75,
   });
 
-  // Yield control with double requestAnimationFrame + timeout for smooth UI repaint
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(resolve, 120);
-      });
-    });
-  });
+  // Yield control to UI event loop without requestAnimationFrame so background tabs continue processing
+  await new Promise<void>((resolve) => setTimeout(resolve, 20));
 
   const feeds: Record<string, ort.Tensor> = {
     [session.inputNames[0]]: imageTensor,
